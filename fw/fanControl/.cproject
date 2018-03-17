@@ -181,14 +181,14 @@
 				<option id="cmsis.device.vendor.name" value="STMicroelectronics"/>
 				<option id="cmsis.device.vendor.id" value="13"/>
 				<option id="cmsis.device.pack.vendor" value="Keil"/>
-				<option id="cmsis.device.pack.name" value="STM32F0xx_DFP"/>
+				<option id="cmsis.device.pack.name" value=""/>
 				<option id="cmsis.device.pack.version" value="1.5.0"/>
 				<option id="cmsis.board.name" value="STM32F051-Discovery"/>
 				<option id="cmsis.board.revision" value="Rev.B"/>
 				<option id="cmsis.board.vendor.name" value="STMicroelectronics"/>
 				<option id="cmsis.board.clock" value="8000000"/>
 				<option id="cmsis.board.pack.vendor" value="Keil"/>
-				<option id="cmsis.board.pack.name" value="STM32F0xx_DFP"/>
+				<option id="cmsis.board.pack.name" value=""/>
 				<option id="cmsis.board.pack.version" value="1.5.0"/>
 				<option id="cmsis.core.name" value="Cortex-M0"/>
 				<option id="cmsis.compiler.define" value="STM32F051x8"/>
@@ -380,6 +380,14 @@
 		</scannerConfigBuildInfo>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
-	<storageModule moduleId="refreshScope"/>
+	<storageModule moduleId="refreshScope" versionNumber="2">
+		<configuration configurationName="Debug">
+			<resource resourceType="PROJECT" workspacePath="/fanControl"/>
+		</configuration>
+		<configuration configurationName="Release">
+			<resource resourceType="PROJECT" workspacePath="/fanControl"/>
+		</configuration>
+	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
+	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 </cproject>

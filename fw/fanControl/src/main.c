@@ -16,6 +16,11 @@ void RPM_Init(void);
 void Control_Init(void);
 void Control_Set(uint8_t channel, uint16_t value);
 
+static uint16_t rpm[4] = {0};
+static uint16_t lastCount[4] = {0};
+static uint16_t delta[4] = {0};
+static uint8_t valid[4] = {0};
+
 // ----- main() ---------------------------------------------------------------
 
 /*
@@ -60,20 +65,20 @@ int main(int argc, char* argv[])
 	Control_Init();
 	Sense_Init();
 
-	uint16_t pwmValue = 60;
+	uint16_t pwmValue = 180;
 
 	for (;;) {
 		ADC_StartOfConversion(ADC1);
 		pwmValue += 1;
-		if (pwmValue >= 240) { pwmValue = 0; }
+		if (pwmValue >= 236) { pwmValue = 180; }
 		Control_Set(2, pwmValue);
 		timer_sleep(250);
 		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 1125) / 16; // * 3 * 6 * 1000 / 64;
-		snprintf(adc, 16, "adc:% 5d mV", adcValue);
+		snprintf(adc, 16, "% 5dmV %d", adcValue, delta[1]);
 		LCD_Write(LCD_Line1, 0, adc, 12);
-		snprintf(pwm, 16, "pwm:% 3d%%", (100*pwmValue)/240);
-		LCD_Write(LCD_Line2, 0, pwm, 8);
-		LCD_Write(LCD_Line2, 8, &loop[offset], 8);
+		snprintf(pwm, 13, "% 3d%% % 6d", (100*pwmValue)/240, rpm[1]);
+		LCD_Write(LCD_Line2, 0, pwm, 12);
+		LCD_Write(LCD_Line2, 12, &loop[offset], 4);
 		offset = (offset + 1) % 14;
 	}
 }
@@ -105,7 +110,7 @@ void Sense_Init(void)
 
     // TODO: fill this out properly
     ADC_InitTypeDef ADC_InitStructure = {
-    		.ADC_Resolution = ADC_Resolution_8b,
+		.ADC_Resolution = ADC_Resolution_8b,
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None,
 		.ADC_ExternalTrigConvEdge = 0,
@@ -151,7 +156,7 @@ void RPM_Init(void)
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
 	TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct = {
-			.TIM_Prescaler = 48000,	// 1 kHz clock
+			.TIM_Prescaler = 480,	// 100 kHz clock
 			.TIM_CounterMode = TIM_CounterMode_Up,
 			.TIM_Period = 0xFFFF,
 			.TIM_ClockDivision = TIM_CKD_DIV1,
@@ -161,10 +166,10 @@ void RPM_Init(void)
 
 	TIM_ICInitTypeDef TIM_ICInitStruct = {
 			.TIM_Channel = TIM_Channel_1,
-			.TIM_ICPolarity = TIM_ICPolarity_Falling,
+			.TIM_ICPolarity = TIM_ICPolarity_BothEdge,
 			.TIM_ICSelection = TIM_ICSelection_DirectTI,
 			.TIM_ICPrescaler = TIM_ICPSC_DIV1,
-			.TIM_ICFilter = 0,
+			.TIM_ICFilter = 3,
 	};
 	TIM_ICInit(TIM2, &TIM_ICInitStruct);
 	TIM_ICInitStruct.TIM_Channel = TIM_Channel_2;
@@ -182,21 +187,36 @@ void RPM_Init(void)
 	NVIC_ClearPendingIRQ(TIM2_IRQn);
 	NVIC_EnableIRQ(TIM2_IRQn);
 
+	TIM_Cmd(TIM2, ENABLE);
 }
 
 void TIM2_IRQHandler(void)
 {
-	static uint16_t lastCount[4] = {0};
-	static uint8_t valid[4] = {0};
 
 	if (TIM2->SR & TIM_FLAG_CC1) {
 		uint16_t count = TIM2->CCR1;
-		if (valid[0]) {
-			uint16_t delta = count - lastCount[0];
-			lastCount[0] = count;
+		uint8_t i = 0;
+		if (valid[i]) {
+			delta[i] = count - lastCount[i];
+			rpm[i] = 30000/delta[i];
+			lastCount[i] = count;
 		} else {
-			lastCount[0] = count;
-			valid[0] = 1;
+			lastCount[i] = count;
+			valid[i] = 1;
+		}
+	}
+
+	if (TIM2->SR & TIM_FLAG_CC2) {
+		uint16_t count = TIM2->CCR2;
+		uint8_t i = 1;
+		if (valid[i] && (count - lastCount[i]) > 400) {
+			delta[i] = count - lastCount[i];
+			uint16_t newRPM = 1500000/delta[i];
+			rpm[i] = (newRPM + (rpm[i] * 3))/4;
+			lastCount[i] = count;
+		} else {
+			lastCount[i] = count;
+			valid[i] = 1;
 		}
 	}
 
