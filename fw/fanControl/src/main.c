@@ -68,12 +68,11 @@ int main(int argc, char* argv[])
 	uint16_t pwmValue = 180;
 
 	for (;;) {
-		ADC_StartOfConversion(ADC1);
 		pwmValue += 1;
 		if (pwmValue >= 236) { pwmValue = 180; }
 		Control_Set(2, pwmValue);
 		timer_sleep(250);
-		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 1125) / 16; // * 3 * 6 * 1000 / 64;
+		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 1125) / 4; // * 3V * 6x * 1000mV / (2^6);
 		snprintf(adc, 16, "% 5dmV %d", adcValue, delta[1]);
 		LCD_Write(LCD_Line1, 0, adc, 12);
 		snprintf(pwm, 13, "% 3d%% % 6d", (100*pwmValue)/240, rpm[1]);
@@ -108,12 +107,11 @@ void Sense_Init(void)
 	// ADC config
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
-    // TODO: fill this out properly
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_8b,
+		.ADC_Resolution = ADC_Resolution_6b,
 		.ADC_ContinuousConvMode = DISABLE,
-		.ADC_ExternalTrigConv = ADC_ExternalTrigConvEdge_None,
-		.ADC_ExternalTrigConvEdge = 0,
+		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
+		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
 		.ADC_DataAlign = ADC_DataAlign_Right,
 		.ADC_ScanDirection = ADC_ScanDirection_Upward
     };
@@ -124,6 +122,7 @@ void Sense_Init(void)
 
     ADC_GetCalibrationFactor(ADC1);
     ADC_Cmd(ADC1, ENABLE);
+	ADC_StartOfConversion(ADC1);
 }
 
 
@@ -272,6 +271,7 @@ void Control_Init(void)
 	TIM_OC2PreloadConfig(TIM3, TIM_OCPreload_Enable);
 
 	TIM_SelectOnePulseMode(TIM3, TIM_OPMode_Repetitive);
+	TIM_SelectOutputTrigger(TIM3, TIM_TRGOSource_Update);
 
 	TIM_Cmd(TIM3, ENABLE);
 }
