@@ -31,10 +31,10 @@ LIBS:opto
 LIBS:atmel
 LIBS:contrib
 LIBS:valves
+LIBS:joystick
 LIBS:stm32
 LIBS:w_connectors
-LIBS:joystick
-LIBS:vent_fan-cache
+LIBS:split_buck-cache
 EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
@@ -77,21 +77,10 @@ U 1 1 5AA40CDB
 P 5500 3400
 F 0 "L1" V 5450 3400 50  0000 C CNN
 F 1 "100u" V 5575 3400 50  0000 C CNN
-F 2 "Inductors_THT:L_Axial_L9.5mm_D4.0mm_P15.24mm_Horizontal_Fastron_SMCC" H 5500 3400 50  0001 C CNN
+F 2 "Inductors_THT:L_Axial_L7.0mm_D3.3mm_P10.16mm_Horizontal_Fastron_MICC" H 5500 3400 50  0001 C CNN
 F 3 "" H 5500 3400 50  0001 C CNN
 	1    5500 3400
 	0    1    -1   0   
-$EndComp
-$Comp
-L D_Schottky D1
-U 1 1 5AA40D58
-P 4600 2950
-F 0 "D1" H 4600 3050 50  0000 C CNN
-F 1 "D_Schottky" H 4600 2850 50  0000 C CNN
-F 2 "Diodes_SMD:D_SOD-123" H 4600 2950 50  0001 C CNN
-F 3 "" H 4600 2950 50  0001 C CNN
-	1    4600 2950
-	0    1    1    0   
 $EndComp
 $Comp
 L D_Schottky D2
@@ -129,12 +118,12 @@ $EndComp
 $Comp
 L C C1
 U 1 1 5AA40F47
-P 4300 2950
-F 0 "C1" H 4325 3050 50  0000 L CNN
-F 1 "1u" H 4325 2850 50  0000 L CNN
-F 2 "Capacitors_SMD:C_0603_HandSoldering" H 4338 2800 50  0001 C CNN
-F 3 "" H 4300 2950 50  0001 C CNN
-	1    4300 2950
+P 4200 2950
+F 0 "C1" H 4225 3050 50  0000 L CNN
+F 1 "10u" H 4225 2850 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0805_HandSoldering" H 4238 2800 50  0001 C CNN
+F 3 "" H 4200 2950 50  0001 C CNN
+	1    4200 2950
 	1    0    0    -1  
 $EndComp
 $Comp
@@ -142,8 +131,8 @@ L C C3
 U 1 1 5AA40FBD
 P 5800 3600
 F 0 "C3" H 5825 3700 50  0000 L CNN
-F 1 "1u" H 5825 3500 50  0000 L CNN
-F 2 "Capacitors_SMD:C_0603_HandSoldering" H 5838 3450 50  0001 C CNN
+F 1 "10u" H 5825 3500 50  0000 L CNN
+F 2 "Capacitors_SMD:C_0805_HandSoldering" H 5838 3450 50  0001 C CNN
 F 3 "" H 5800 3600 50  0001 C CNN
 	1    5800 3600
 	1    0    0    -1  
@@ -184,12 +173,12 @@ $EndComp
 $Comp
 L GND #PWR03
 U 1 1 5AA416CE
-P 4300 3100
-F 0 "#PWR03" H 4300 2850 50  0001 C CNN
-F 1 "GND" H 4300 2950 50  0000 C CNN
-F 2 "" H 4300 3100 50  0001 C CNN
-F 3 "" H 4300 3100 50  0001 C CNN
-	1    4300 3100
+P 4200 3100
+F 0 "#PWR03" H 4200 2850 50  0001 C CNN
+F 1 "GND" H 4200 2950 50  0000 C CNN
+F 2 "" H 4200 3100 50  0001 C CNN
+F 3 "" H 4200 3100 50  0001 C CNN
+	1    4200 3100
 	1    0    0    -1  
 $EndComp
 Text Label 3400 3600 0    60   ~ 0
@@ -250,7 +239,7 @@ Wire Wire Line
 	4600 3100 4600 3250
 Connection ~ 4850 3150
 Connection ~ 5200 3800
-Connection ~ 4300 2750
+Connection ~ 4200 2750
 Wire Wire Line
 	4100 2750 5900 2750
 Connection ~ 5200 2750
@@ -264,7 +253,7 @@ Wire Wire Line
 	6500 3650 6550 3650
 Connection ~ 4600 3150
 Wire Wire Line
-	4300 2750 4300 2800
+	4200 2750 4200 2800
 Wire Wire Line
 	4850 3100 4850 3150
 Wire Wire Line
@@ -391,4 +380,21 @@ Wire Wire Line
 Wire Wire Line
 	1550 2850 1550 2950
 Connection ~ 1550 2950
+$Comp
+L D_Zener D1
+U 1 1 5AAEA835
+P 4600 2950
+F 0 "D1" H 4600 3050 50  0000 C CNN
+F 1 "D_Zener" H 4600 2850 50  0000 C CNN
+F 2 "Diodes_SMD:D_SOD-123" H 4600 2950 50  0001 C CNN
+F 3 "" H 4600 2950 50  0001 C CNN
+	1    4600 2950
+	0    1    1    0   
+$EndComp
+Text Label 6350 3550 0    30   ~ 0
+FAN_VOUT
+Text Label 4650 3150 0    30   ~ 0
+GATE
+Text Label 5250 3400 0    30   ~ 0
+IND_SW
 $EndSCHEMATC
