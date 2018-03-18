@@ -53,13 +53,20 @@ void ADC1_COMP_IRQHandler(void)
 	// int newPWM = 210 + errorP_ADC/16 + errorI_ADC/4096 + 0*errorD_ADC/64;
 
 	// with more output cap:
-	int newPWM = 180 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
+	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
 		newPWM = 236;
 	} else if (newPWM < 0) {
 		newPWM = 0;
 	}
 	TIM3->CCR2 = newPWM;
+
+	// prevent integral wind-up
+	if (errorI_ADC/128 > 236) {
+		errorI_ADC = 236*128;
+	} else if (errorI_ADC < 0) {
+		errorI_ADC = 0;
+	}
 }
 
 
