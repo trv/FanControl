@@ -1,4 +1,4 @@
-update=3/10/2018 5:55:06 PM
+update=3/18/2018 10:37:15 AM
 version=1
 last_client=kicad
 [pcbnew]
@@ -27,7 +27,7 @@ NetIExt=net
 version=1
 [eeschema]
 version=1
-LibDir=lib
+LibDir=../lib
 [eeschema/libraries]
 LibName1=power
 LibName2=device
@@ -61,6 +61,6 @@ LibName29=opto
 LibName30=atmel
 LibName31=contrib
 LibName32=valves
-LibName33=lib/stm32
-LibName34=lib/w_connectors
-LibName35=lib/joystick
+LibName33=joystick
+LibName34=stm32
+LibName35=w_connectors
