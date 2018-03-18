@@ -21,6 +21,11 @@ static uint16_t lastCount[4] = {0};
 static uint16_t delta[4] = {0};
 static uint8_t valid[4] = {0};
 
+static uint16_t target_ADC = 67;	// 4.5V
+static int errorP_ADC = 0;
+static int errorI_ADC = 0;
+static int errorD_ADC = 0;
+
 // ----- main() ---------------------------------------------------------------
 
 /*
@@ -31,6 +36,32 @@ TIM2: measure RPM, periodically report
 TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
 
  */
+void ADC1_COMP_IRQHandler(void);
+void ADC1_COMP_IRQHandler(void)
+{
+	// read ADC conversion result, compare against target value, update PWM output
+	static uint32_t lastSample = 0;
+	uint32_t sample = ADC1->DR;
+
+	errorP_ADC = target_ADC - sample;
+	errorI_ADC += errorP_ADC;
+	errorD_ADC = sample - lastSample;
+
+	lastSample = sample;
+
+	// with 1uF output cap:
+	// int newPWM = 210 + errorP_ADC/16 + errorI_ADC/4096 + 0*errorD_ADC/64;
+
+	// with more output cap:
+	int newPWM = 180 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
+	if (newPWM > 236) {
+		newPWM = 236;
+	} else if (newPWM < 0) {
+		newPWM = 0;
+	}
+	TIM3->CCR2 = newPWM;
+}
+
 
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
@@ -51,8 +82,8 @@ int main(int argc, char* argv[])
 
 	char *hello = " Hello World!";
 	char *test = "Test \xF4 \010\011\012\013\014\015\016\017";
-	char adc[16];
-	char pwm[16];
+	char adc[17];
+	char pwm[17];
 
 	LCD_Write(LCD_Line1, 0, hello, strlen(hello));
 	timer_sleep(10);
@@ -65,19 +96,20 @@ int main(int argc, char* argv[])
 	Control_Init();
 	Sense_Init();
 
-	uint16_t pwmValue = 180;
-
 	for (;;) {
-		pwmValue += 1;
-		if (pwmValue >= 236) { pwmValue = 180; }
-		Control_Set(2, pwmValue);
-		timer_sleep(250);
-		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 1125) / 4; // * 3V * 6x * 1000mV / (2^6);
-		snprintf(adc, 16, "% 5dmV %d", adcValue, delta[1]);
-		LCD_Write(LCD_Line1, 0, adc, 12);
-		snprintf(pwm, 13, "% 3d%% % 6d", (100*pwmValue)/240, rpm[1]);
-		LCD_Write(LCD_Line2, 0, pwm, 12);
-		LCD_Write(LCD_Line2, 12, &loop[offset], 4);
+		if (offset & 0x01) {
+			target_ADC = 67;
+		} else {
+			target_ADC = 59;
+		}
+		timer_sleep(1000);
+		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 68);
+		snprintf(adc, 17, "%5dmV %3d %3lu  ", adcValue, errorP_ADC, TIM3->CCR2);
+		LCD_Write(LCD_Line1, 0, adc, 16);
+		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
+		LCD_Write(LCD_Line2, 0, pwm, 16);
+
+		//LCD_Write(LCD_Line2, 12, &loop[offset], 4);
 		offset = (offset + 1) % 14;
 	}
 }
@@ -112,7 +144,7 @@ void Sense_Init(void)
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Right,
+		.ADC_DataAlign = ADC_DataAlign_Left,
 		.ADC_ScanDirection = ADC_ScanDirection_Upward
     };
 
@@ -120,11 +152,16 @@ void Sense_Init(void)
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
     ADC_ChannelConfig(ADC1, ADC_Channel_11, ADC_SampleTime_7_5Cycles);
 
+	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
+	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
+
+	NVIC_ClearPendingIRQ(ADC1_COMP_IRQn);
+	NVIC_EnableIRQ(ADC1_COMP_IRQn);
+
     ADC_GetCalibrationFactor(ADC1);
     ADC_Cmd(ADC1, ENABLE);
 	ADC_StartOfConversion(ADC1);
 }
-
 
 void RPM_Init(void)
 {
@@ -189,6 +226,7 @@ void RPM_Init(void)
 	TIM_Cmd(TIM2, ENABLE);
 }
 
+void TIM2_IRQHandler(void);
 void TIM2_IRQHandler(void)
 {
 
