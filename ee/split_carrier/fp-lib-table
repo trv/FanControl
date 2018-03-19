@@ -1,4 +1,5 @@
 (fp_lib_table
   (lib (name w_conn_misc)(type KiCad)(uri "$(KIPRJMOD)/../lib/w_conn_misc.pretty")(options "")(descr ""))
   (lib (name joystick)(type KiCad)(uri "$(KIPRJMOD)/../lib/joystick.pretty")(options "")(descr ""))
+  (lib (name custom)(type KiCad)(uri "$(KIPRJMOD)/../lib/custom.pretty")(options "")(descr ""))
 )
