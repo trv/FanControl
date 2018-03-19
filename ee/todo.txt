@@ -2,11 +2,17 @@ EE TODO:
 
 Schematic:
 
+- finish pin assignments
+
+DONE:
+
+Schematic:
+
 - switch to ~3V Zener diode
 - add schottky diodes to 3V3 on GPIO PWM pins
-- increase input/output caps to 10 uF
+- increase input/output caps to 10 uF + 100uF electrolytic output cap
 - update pin assignments for 8x control PWM and 8x GPIO RPM inputs (EXTI)
 
 Layout:
 
-- rotate fan header 45 degrees
+- rotate fan header 30 degrees
