@@ -47,7 +47,7 @@ static const uint32_t VDD_CORRECTION = (65536 * VDD_APPLI )/ VDD_CALIB;
 static uint32_t TEMP_CORRECTION;	// = 65536 / (*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
 
 static uint32_t lastSample = 0;
-static uint32_t temperature = 0;
+static volatile int32_t temperature = 0;
 
 void ADC1_COMP_IRQHandler(void);
 void ADC1_COMP_IRQHandler(void)
@@ -246,9 +246,9 @@ void RPM_Init(void)
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
 	TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct = {
-			.TIM_Prescaler = 4800,	// 10 kHz clock (100us)
+			.TIM_Prescaler = 48,	// 1000 kHz clock (1us)
 			.TIM_CounterMode = TIM_CounterMode_Up,
-			.TIM_Period = 0xFFFF,
+			.TIM_Period = 0xFFFF,	// 65.536 ms period
 			.TIM_ClockDivision = TIM_CKD_DIV1,
 			.TIM_RepetitionCounter = 0,
 	};
