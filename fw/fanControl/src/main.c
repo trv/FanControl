@@ -36,13 +36,38 @@ TIM2: measure RPM, periodically report
 TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
 
  */
+
+/* Temperature sensor calibration value address */
+#define TEMP110_CAL_ADDR ((uint16_t*) ((uint32_t) 0x1FFFF7C2))
+#define TEMP30_CAL_ADDR ((uint16_t*) ((uint32_t) 0x1FFFF7B8))
+#define VDD_CALIB ((uint16_t) (330))
+#define VDD_APPLI ((uint16_t) (300))
+
+static const uint32_t VDD_CORRECTION = (65536 * VDD_APPLI )/ VDD_CALIB;
+static uint32_t TEMP_CORRECTION;	// = 65536 / (*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
+
+static uint32_t lastSample = 0;
+static uint32_t temperature = 0;
+
 void ADC1_COMP_IRQHandler(void);
 void ADC1_COMP_IRQHandler(void)
 {
 	// read ADC conversion result, compare against target value, update PWM output
-	static uint32_t lastSample = 0;
-	uint32_t sample = ADC1->DR;
+	//uint32_t sample = ADC1->DR;
 
+	/*
+	temperature = (((int32_t) sample * VDD_CORRECTION)>>16) - (int32_t) *TEMP30_CAL_ADDR;
+	temperature = temperature * (int32_t)(110 - 30);
+	temperature = (temperature * TEMP_CORRECTION) >> 16;
+	temperature = temperature + 30;
+	*/
+
+	temperature = (((int32_t) ADC1->DR * VDD_APPLI / VDD_CALIB) - (int32_t) *TEMP30_CAL_ADDR );
+	temperature = temperature * (int32_t)(110 - 30);
+	temperature = temperature / (int32_t)(*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
+	temperature = temperature + 30;
+
+/*
 	errorP_ADC = target_ADC - sample;
 	errorI_ADC += errorP_ADC;
 	errorD_ADC = sample - lastSample;
@@ -55,7 +80,7 @@ void ADC1_COMP_IRQHandler(void)
 	// with more output cap:
 	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
-		newPWM = 236;
+		newPWM = 120;
 	} else if (newPWM < 0) {
 		newPWM = 0;
 	}
@@ -67,6 +92,7 @@ void ADC1_COMP_IRQHandler(void)
 	} else if (errorI_ADC < 0) {
 		errorI_ADC = 0;
 	}
+	*/
 }
 
 
@@ -80,6 +106,8 @@ void ADC1_COMP_IRQHandler(void)
 int main(int argc, char* argv[])
 {
 	//DBGMCU_Config(DBGMCU_TIM15_STOP, ENABLE);
+
+	TEMP_CORRECTION = 65536 / (*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
 
 	timer_start();
 
@@ -109,9 +137,9 @@ int main(int argc, char* argv[])
 		} else {
 			target_ADC = 59;
 		}
-		timer_sleep(1000);
-		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 68);
-		snprintf(adc, 17, "%5dmV %3d %3lu  ", adcValue, errorP_ADC, TIM3->CCR2);
+		timer_sleep(500);
+		uint16_t adcValue = temperature;
+		snprintf(adc, 17, "%5d\337C %3d %3lu  ", adcValue, errorP_ADC, TIM3->CCR2);
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
@@ -147,17 +175,21 @@ void Sense_Init(void)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_6b,
+		.ADC_Resolution = ADC_Resolution_12b,
 		.ADC_ContinuousConvMode = DISABLE,
-		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
+		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T2_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Left,
+		.ADC_DataAlign = ADC_DataAlign_Right,
 		.ADC_ScanDirection = ADC_ScanDirection_Upward
     };
 
     ADC_Init(ADC1, &ADC_InitStructure);
+    ADC_TempSensorCmd(ENABLE);
+
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
-    ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
+    //ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_TempSensor, ADC_SampleTime_55_5Cycles);
+
 
 	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
 	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
@@ -196,14 +228,15 @@ void RPM_Init(void)
 	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource8);
 
 	EXTI_InitTypeDef EXTI_InitStruct = {
-			.EXTI_Line = 0,
-			.EXTI_LineCmd = 0,
-			.EXTI_Mode = 0,
-			.EXTI_Trigger = 0	// TODO: configure these values
+			.EXTI_Line = EXTI_Line8,
+			.EXTI_Mode = EXTI_Mode_Interrupt,
+			.EXTI_Trigger = EXTI_Trigger_Rising_Falling,
+			.EXTI_LineCmd = ENABLE
 	};
 
 	EXTI_Init(&EXTI_InitStruct);
-
+	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
+	NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 	// TIM2 config - input capture
 	// RPM up to 4000 = 133Hz pulses @ 2 per revolution (~7.5ms)
@@ -213,59 +246,23 @@ void RPM_Init(void)
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
 	TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct = {
-			.TIM_Prescaler = 480,	// 100 kHz clock
+			.TIM_Prescaler = 4800,	// 10 kHz clock (100us)
 			.TIM_CounterMode = TIM_CounterMode_Up,
 			.TIM_Period = 0xFFFF,
 			.TIM_ClockDivision = TIM_CKD_DIV1,
 			.TIM_RepetitionCounter = 0,
 	};
 	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct);
-
-	TIM_ICInitTypeDef TIM_ICInitStruct = {
-			.TIM_Channel = TIM_Channel_1,
-			.TIM_ICPolarity = TIM_ICPolarity_BothEdge,
-			.TIM_ICSelection = TIM_ICSelection_DirectTI,
-			.TIM_ICPrescaler = TIM_ICPSC_DIV1,
-			.TIM_ICFilter = 3,
-	};
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_2;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_3;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_4;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-
-	// interrupt config
-	uint16_t flags = TIM_IT_CC1 | TIM_IT_CC2 | TIM_IT_CC3 | TIM_IT_CC4; // | TIM_IT_Update;
-	TIM_ITConfig(TIM2, flags, ENABLE);
-	TIM_ClearFlag(TIM2, flags);
-
-	NVIC_ClearPendingIRQ(TIM2_IRQn);
-	NVIC_EnableIRQ(TIM2_IRQn);
+	TIM_SelectOutputTrigger(TIM2, TIM_TRGOSource_Update);
 
 	TIM_Cmd(TIM2, ENABLE);
 }
 
-void TIM2_IRQHandler(void);
-void TIM2_IRQHandler(void)
+void EXTI4_15_IRQHandler(void);
+void EXTI4_15_IRQHandler(void)
 {
-
-	if (TIM2->SR & TIM_FLAG_CC1) {
-		uint16_t count = TIM2->CCR1;
-		uint8_t i = 0;
-		if (valid[i]) {
-			delta[i] = count - lastCount[i];
-			rpm[i] = 30000/delta[i];
-			lastCount[i] = count;
-		} else {
-			lastCount[i] = count;
-			valid[i] = 1;
-		}
-	}
-
-	if (TIM2->SR & TIM_FLAG_CC2) {
-		uint16_t count = TIM2->CCR2;
+	if (EXTI_GetFlagStatus(EXTI_Line8)) {
+		uint16_t count = TIM2->CNT;
 		uint8_t i = 1;
 		if (valid[i] && (count - lastCount[i]) > 400) {
 			delta[i] = count - lastCount[i];
@@ -276,8 +273,8 @@ void TIM2_IRQHandler(void)
 			lastCount[i] = count;
 			valid[i] = 1;
 		}
+		EXTI_ClearFlag(EXTI_Line8);
 	}
-
 }
 
 void Control_Init(void)
