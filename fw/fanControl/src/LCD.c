@@ -9,16 +9,15 @@
 
 
 // LCD pin defs
-#define LCD_RS_PIN		GPIO_Pin_13
-#define LCD_RW_PIN		GPIO_Pin_14
-#define LCD_CTRL_PINS	(LCD_RS_PIN | LCD_RW_PIN)
-#define LCD_CTRL_PORT	GPIOB
+#define LCD_RS_PIN		GPIO_Pin_8
+#define LCD_CTRL_PINS	(LCD_RS_PIN)
+#define LCD_CTRL_PORT	GPIOA
 
 #define LCD_E_PIN		GPIO_Pin_15
 #define LCD_E_PORT		GPIOB
 
 #define LCD_DATA_PINS	(0xFF)
-#define LCD_DATA_PORT	GPIOB
+#define LCD_DATA_PORT	GPIOA
 
 #define LINE_LENGTH		40
 #define LINE1OFFSET		1
@@ -71,8 +70,8 @@ void LCD_Write(enum LCD_Line line, size_t position, char *str, size_t len)
 static void initGPIO(void)
 {
 	// enable GPIO peripheral clocks
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
-	//RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
 
 	// reset all outputs
 	GPIO_ResetBits(LCD_CTRL_PORT, LCD_CTRL_PINS);
@@ -88,9 +87,6 @@ static void initGPIO(void)
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
 
 	GPIO_InitStructure.GPIO_Pin = LCD_RS_PIN;
-	GPIO_Init(LCD_CTRL_PORT, &GPIO_InitStructure);
-
-	GPIO_InitStructure.GPIO_Pin = LCD_RW_PIN;
 	GPIO_Init(LCD_CTRL_PORT, &GPIO_InitStructure);
 
 	for (int i = 0; i < 8; i++) {
@@ -211,6 +207,7 @@ static void refresh(void)
 	TIM_Cmd(TIM15, ENABLE);
 }
 
+void TIM15_IRQHandler(void);
 void TIM15_IRQHandler(void)
 {
 	if (TIM_GetFlagStatus(TIM15, TIM_FLAG_CC2) == SET) {
