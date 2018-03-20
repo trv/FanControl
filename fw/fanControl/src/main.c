@@ -157,7 +157,7 @@ void Sense_Init(void)
 
     ADC_Init(ADC1, &ADC_InitStructure);
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
-    ADC_ChannelConfig(ADC1, ADC_Channel_11, ADC_SampleTime_7_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
 
 	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
 	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
@@ -170,26 +170,40 @@ void Sense_Init(void)
 	ADC_StartOfConversion(ADC1);
 }
 
+const uint32_t rpmPins[4] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
+GPIO_TypeDef *rpmPort = GPIOB;
+
 void RPM_Init(void)
 {
 	// GPIO Config ------------------------
-
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOA, ENABLE);
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
 
 	GPIO_InitTypeDef GPIO_InitStructure;
 
 	// Configure pin in output push/pull mode
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_Level_2;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;	// only for PA0
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
 
 	for (int i = 0; i < 4; i++) {
-		GPIO_InitStructure.GPIO_Pin = (uint32_t)((0x01) << i);
-		GPIO_Init(GPIOA, &GPIO_InitStructure);
-		GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;	// for now to use PA0 button for testing
-		GPIO_PinAFConfig(GPIOA, i, GPIO_AF_2);
+		GPIO_InitStructure.GPIO_Pin = rpmPins[i];
+		GPIO_Init(rpmPort, &GPIO_InitStructure);
 	}
+
+	// EXTI Config
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
+	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource8);
+
+	EXTI_InitTypeDef EXTI_InitStruct = {
+			.EXTI_Line = 0,
+			.EXTI_LineCmd = 0,
+			.EXTI_Mode = 0,
+			.EXTI_Trigger = 0	// TODO: configure these values
+	};
+
+	EXTI_Init(&EXTI_InitStruct);
+
 
 	// TIM2 config - input capture
 	// RPM up to 4000 = 133Hz pulses @ 2 per revolution (~7.5ms)
