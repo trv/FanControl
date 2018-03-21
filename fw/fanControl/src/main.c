@@ -23,22 +23,32 @@ static uint16_t lastCount[NUM_CHANNELS] = {0};
 static uint16_t delta[NUM_CHANNELS] = {0};
 static uint8_t valid[NUM_CHANNELS] = {0};
 
-static volatile uint16_t target_ADC = 67;	// 4.5V
-static volatile int errorP_ADC = 0;
-static volatile int errorI_ADC = 0;
-static volatile int errorD_ADC = 0;
-
 // ----- main() ---------------------------------------------------------------
 
 /*
 
 ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, flag for completion?)
-TIM3: output PWM at 200kHz, update based on ADC or RPM values
-TIM2: measure RPM, periodically report
+TIM2-3: output PWM at 200kHz, update based on ADC or RPM values
+TIMx?: timer for EXTI-triggered GPIO RPM sense pins (internal only)
 TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
+TIM15: LCD DMA timing
+ */
+
+/*
+TODO:
+- ADC DMA stuff w/ ISR trigger on completion, double-buffered?
+- support multiple channels (make everything arrays of channel values)
+
+
+- UI?
+- SMBUS?
 
  */
 
+static volatile uint16_t target_ADC = 67;	// 4.5V
+static volatile int errorP_ADC = 0;
+static volatile int errorI_ADC = 0;
+static volatile int errorD_ADC = 0;
 static uint32_t lastSample = 0;
 static volatile uint32_t adcValue = 0;
 
@@ -46,7 +56,7 @@ void ADC1_COMP_IRQHandler(void);
 void ADC1_COMP_IRQHandler(void)
 {
 	// read ADC conversion result, compare against target value, update PWM output
-	adcValue = ADC1->DR;
+	adcValue = ADC1->DR;    // reading ADC1->DR also clears interrupt flag
 
 	errorP_ADC = target_ADC - adcValue;
 	errorI_ADC += errorP_ADC;
@@ -151,7 +161,7 @@ void Sense_Init(void)
     ADC_InitTypeDef ADC_InitStructure = {
 		.ADC_Resolution = ADC_Resolution_12b,
 		.ADC_ContinuousConvMode = DISABLE,
-		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T2_TRGO,
+		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
 		.ADC_DataAlign = ADC_DataAlign_Right,
 		.ADC_ScanDirection = ADC_ScanDirection_Upward
@@ -226,7 +236,6 @@ void RPM_Init(void)
 			.TIM_RepetitionCounter = 0,
 	};
 	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct);
-	TIM_SelectOutputTrigger(TIM2, TIM_TRGOSource_Update);
 
 	TIM_Cmd(TIM2, ENABLE);
 }
