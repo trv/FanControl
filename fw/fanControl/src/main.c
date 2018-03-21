@@ -23,8 +23,6 @@ static uint16_t lastCount[NUM_CHANNELS] = {0};
 static uint16_t delta[NUM_CHANNELS] = {0};
 static uint8_t valid[NUM_CHANNELS] = {0};
 
-// ----- main() ---------------------------------------------------------------
-
 /*
 
 ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, flag for completion?)
@@ -80,6 +78,7 @@ void ADC1_COMP_IRQHandler(void)
 	}
 }
 
+// ----- main() ---------------------------------------------------------------
 
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
@@ -155,15 +154,36 @@ void Sense_Init(void)
 		GPIO_Init(GPIOC, &GPIO_InitStructure);
 	}
 
+	// DMA config
+/*
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+
+	DMA_InitTypeDef DMA_InitStruct = {
+			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->CR,
+			.DMA_MemoryBaseAddr = (uint32_t)&buffer,
+			.DMA_DIR = DMA_DIR_PeripheralDST,
+			.DMA_BufferSize = sizeof(buffer),
+			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,
+			.DMA_MemoryInc = DMA_MemoryInc_Enable,
+			.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
+			.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord,
+			.DMA_Mode = DMA_Mode_Normal,
+			.DMA_Priority = DMA_Priority_Medium,
+			.DMA_M2M = DMA_M2M_Disable,
+	};
+
+	DMA_Init(DMA1_Channel5, &DMA_InitStruct);
+*/
+
 	// ADC config
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_12b,
+		.ADC_Resolution = ADC_Resolution_6b,
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Right,
+		.ADC_DataAlign = ADC_DataAlign_Left,
 		.ADC_ScanDirection = ADC_ScanDirection_Upward
     };
 
@@ -181,6 +201,7 @@ void Sense_Init(void)
 	NVIC_EnableIRQ(ADC1_COMP_IRQn);
 
     ADC_GetCalibrationFactor(ADC1);
+    ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
     ADC_Cmd(ADC1, ENABLE);
 	ADC_StartOfConversion(ADC1);
 }
