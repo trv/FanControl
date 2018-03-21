@@ -16,15 +16,17 @@ void RPM_Init(void);
 void Control_Init(void);
 void Control_Set(uint8_t channel, uint16_t value);
 
-static uint16_t rpm[4] = {0};
-static uint16_t lastCount[4] = {0};
-static uint16_t delta[4] = {0};
-static uint8_t valid[4] = {0};
+#define NUM_CHANNELS 4
 
-static uint16_t target_ADC = 67;	// 4.5V
-static int errorP_ADC = 0;
-static int errorI_ADC = 0;
-static int errorD_ADC = 0;
+static uint16_t rpm[NUM_CHANNELS] = {0};
+static uint16_t lastCount[NUM_CHANNELS] = {0};
+static uint16_t delta[NUM_CHANNELS] = {0};
+static uint8_t valid[NUM_CHANNELS] = {0};
+
+static volatile uint16_t target_ADC = 67;	// 4.5V
+static volatile int errorP_ADC = 0;
+static volatile int errorI_ADC = 0;
+static volatile int errorD_ADC = 0;
 
 // ----- main() ---------------------------------------------------------------
 
@@ -37,47 +39,21 @@ TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
 
  */
 
-/* Temperature sensor calibration value address */
-#define TEMP110_CAL_ADDR ((uint16_t*) ((uint32_t) 0x1FFFF7C2))
-#define TEMP30_CAL_ADDR ((uint16_t*) ((uint32_t) 0x1FFFF7B8))
-#define VDD_CALIB ((uint16_t) (330))
-#define VDD_APPLI ((uint16_t) (300))
-
-static const uint32_t VDD_CORRECTION = (65536 * VDD_APPLI )/ VDD_CALIB;
-static uint32_t TEMP_CORRECTION;	// = 65536 / (*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
-
 static uint32_t lastSample = 0;
-static volatile int32_t temperature = 0;
+static volatile uint32_t adcValue = 0;
 
 void ADC1_COMP_IRQHandler(void);
 void ADC1_COMP_IRQHandler(void)
 {
 	// read ADC conversion result, compare against target value, update PWM output
-	//uint32_t sample = ADC1->DR;
+	adcValue = ADC1->DR;
 
-	/*
-	temperature = (((int32_t) sample * VDD_CORRECTION)>>16) - (int32_t) *TEMP30_CAL_ADDR;
-	temperature = temperature * (int32_t)(110 - 30);
-	temperature = (temperature * TEMP_CORRECTION) >> 16;
-	temperature = temperature + 30;
-	*/
-
-	temperature = (((int32_t) ADC1->DR * VDD_APPLI / VDD_CALIB) - (int32_t) *TEMP30_CAL_ADDR );
-	temperature = temperature * (int32_t)(110 - 30);
-	temperature = temperature / (int32_t)(*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
-	temperature = temperature + 30;
-
-/*
-	errorP_ADC = target_ADC - sample;
+	errorP_ADC = target_ADC - adcValue;
 	errorI_ADC += errorP_ADC;
-	errorD_ADC = sample - lastSample;
+	errorD_ADC = adcValue - lastSample;
 
-	lastSample = sample;
+	lastSample = adcValue;
 
-	// with 1uF output cap:
-	// int newPWM = 210 + errorP_ADC/16 + errorI_ADC/4096 + 0*errorD_ADC/64;
-
-	// with more output cap:
 	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
 		newPWM = 120;
@@ -92,7 +68,6 @@ void ADC1_COMP_IRQHandler(void)
 	} else if (errorI_ADC < 0) {
 		errorI_ADC = 0;
 	}
-	*/
 }
 
 
@@ -106,8 +81,6 @@ void ADC1_COMP_IRQHandler(void)
 int main(int argc, char* argv[])
 {
 	//DBGMCU_Config(DBGMCU_TIM15_STOP, ENABLE);
-
-	TEMP_CORRECTION = 65536 / (*TEMP110_CAL_ADDR - *TEMP30_CAL_ADDR);
 
 	timer_start();
 
@@ -126,20 +99,21 @@ int main(int argc, char* argv[])
 
 	char *loop = "\010\011\012\013\014\015\016\017\016\015\014\013\012\011\010\011\012\013\014\015\016\017";
 	size_t offset = 0;
+	size_t i = 0;
 
 	RPM_Init();
 	Control_Init();
 	Sense_Init();
 
 	for (;;) {
-		if (offset & 0x01) {
+		if (i & 0x08) {
 			target_ADC = 67;
 		} else {
 			target_ADC = 59;
 		}
-		timer_sleep(500);
-		uint16_t adcValue = temperature;
-		snprintf(adc, 17, "%5d\337C %3d %3lu  ", adcValue, errorP_ADC, TIM3->CCR2);
+		i++;
+		timer_sleep(250);
+		snprintf(adc, 17, "%5lumV %3d %3lu  ", adcValue * 68, errorP_ADC, TIM3->CCR2);
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
@@ -187,8 +161,7 @@ void Sense_Init(void)
     ADC_TempSensorCmd(ENABLE);
 
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
-    //ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
-    ADC_ChannelConfig(ADC1, ADC_Channel_TempSensor, ADC_SampleTime_55_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
 
 
 	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
@@ -202,7 +175,7 @@ void Sense_Init(void)
 	ADC_StartOfConversion(ADC1);
 }
 
-const uint32_t rpmPins[4] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
+const uint32_t rpmPins[NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
 GPIO_TypeDef *rpmPort = GPIOB;
 
 void RPM_Init(void)
@@ -218,7 +191,7 @@ void RPM_Init(void)
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < NUM_CHANNELS; i++) {
 		GPIO_InitStructure.GPIO_Pin = rpmPins[i];
 		GPIO_Init(rpmPort, &GPIO_InitStructure);
 	}
