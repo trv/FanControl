@@ -64,7 +64,7 @@ void ADC1_COMP_IRQHandler(void)
 
 	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
-		newPWM = 120;
+		newPWM = 236;
 	} else if (newPWM < 0) {
 		newPWM = 0;
 	}
@@ -116,13 +116,13 @@ int main(int argc, char* argv[])
 
 	for (;;) {
 		if (i & 0x08) {
-			target_ADC = 67;
+			target_ADC = 44;		// 68;
 		} else {
-			target_ADC = 59;
+			target_ADC = 60;
 		}
 		i++;
 		timer_sleep(250);
-		snprintf(adc, 17, "%5lumV %3d %3lu  ", adcValue * 68, errorP_ADC, TIM3->CCR2);
+		snprintf(adc, 17, "%5lumV %4d %3lu  ", adcValue * 68, target_ADC * 68, TIM3->CCR2);
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
