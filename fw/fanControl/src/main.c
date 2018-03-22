@@ -243,7 +243,7 @@ void RPM_Init(void)
 	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource8);
 
 	EXTI_InitTypeDef EXTI_InitStruct = {
-			.EXTI_Line = EXTI_Line8,
+			.EXTI_Line = EXTI_Line14,
 			.EXTI_Mode = EXTI_Mode_Interrupt,
 			.EXTI_Trigger = EXTI_Trigger_Rising_Falling,
 			.EXTI_LineCmd = ENABLE
@@ -275,19 +275,19 @@ void RPM_Init(void)
 void EXTI4_15_IRQHandler(void);
 void EXTI4_15_IRQHandler(void)
 {
-	if (EXTI_GetFlagStatus(EXTI_Line8)) {
+	if (EXTI_GetFlagStatus(EXTI_Line14)) {
 		uint16_t count = TIM2->CNT;
 		uint8_t i = 1;
 		if (valid[i] && (count - lastCount[i]) > 400) {
 			delta[i] = count - lastCount[i];
-			uint16_t newRPM = 1500000/delta[i];
+			uint16_t newRPM = 15000000/delta[i];
 			rpm[i] = (newRPM + (rpm[i] * 3))/4;
 			lastCount[i] = count;
 		} else {
 			lastCount[i] = count;
 			valid[i] = 1;
 		}
-		EXTI_ClearFlag(EXTI_Line8);
+		EXTI_ClearFlag(EXTI_Line14);
 	}
 }
 
