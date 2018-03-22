@@ -18,10 +18,10 @@ void Control_Set(uint8_t channel, uint16_t value);
 
 #define NUM_CHANNELS 4
 
-static uint16_t rpm[NUM_CHANNELS] = {0};
-static uint16_t lastCount[NUM_CHANNELS] = {0};
-static uint16_t delta[NUM_CHANNELS] = {0};
-static uint8_t valid[NUM_CHANNELS] = {0};
+static volatile uint16_t rpm[NUM_CHANNELS] = {0};
+static volatile uint16_t lastCount[NUM_CHANNELS] = {0};
+static volatile uint16_t delta[NUM_CHANNELS] = {0};
+static volatile uint8_t valid[NUM_CHANNELS] = {0};
 
 /*
 
