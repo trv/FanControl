@@ -44,7 +44,7 @@ static volatile uint16_t target_ADC = 67;	// 4.5V
 static volatile int errorP_ADC = 0;
 static volatile int errorI_ADC = 0;
 static volatile int errorD_ADC = 0;
-static uint32_t lastSample = 0;
+static volatile uint32_t lastSample = 0;
 static volatile uint16_t adcValue[1*2] = {0};
 
 void DMA1_Channel1_IRQHandler(void);
@@ -181,6 +181,7 @@ void Sense_Init(void)
 	};
 
 	// ADC uses channel 1 if not remapped
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
 	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
 	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
 	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
@@ -237,7 +238,7 @@ void RPM_Init(void)
 
 	// EXTI Config
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
-	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource8);
+	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource14);
 
 	EXTI_InitTypeDef EXTI_InitStruct = {
 			.EXTI_Line = EXTI_Line14,
@@ -275,7 +276,7 @@ void EXTI4_15_IRQHandler(void)
 	if (EXTI_GetFlagStatus(EXTI_Line14)) {
 		uint16_t count = TIM2->CNT;
 		uint8_t i = 1;
-		if (valid[i] && (count - lastCount[i]) > 400) {
+		if (valid[i] && (count - lastCount[i]) > 4000) {
 			delta[i] = count - lastCount[i];
 			uint16_t newRPM = 15000000/delta[i];
 			rpm[i] = (newRPM + (rpm[i] * 3))/4;
