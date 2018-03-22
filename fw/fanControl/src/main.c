@@ -117,6 +117,7 @@ int main(int argc, char* argv[])
 	LCD_Write(LCD_Line1, 0, hello, strlen(hello));
 	timer_sleep(10);
 	LCD_Write(LCD_Line2, 0, test, strlen(test));
+	timer_sleep(250);
 
 	char *loop = "\010\011\012\013\014\015\016\017\016\015\014\013\012\011\010\011\012\013\014\015\016\017";
 	size_t offset = 0;
@@ -138,8 +139,6 @@ int main(int argc, char* argv[])
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
-
-		//LCD_Write(LCD_Line2, 12, &loop[offset], 4);
 		offset = (offset + 1) % 14;
 	}
 }
@@ -171,8 +170,8 @@ void Sense_Init(void)
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
 
 	DMA_InitTypeDef DMA_InitStruct = {
-			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->CR,
-			.DMA_MemoryBaseAddr = (uint32_t)&adcValue,
+			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR,
+			.DMA_MemoryBaseAddr = (uint32_t)adcValue,
 			.DMA_DIR = DMA_DIR_PeripheralSRC,
 			.DMA_BufferSize = 2,
 			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,

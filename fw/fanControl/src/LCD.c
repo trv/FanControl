@@ -137,13 +137,13 @@ static void initTimer(void)
 
 	TIM_CtrlPWMOutputs(TIM15, ENABLE);
 	TIM_SelectOnePulseMode(TIM15, TIM_OPMode_Single);
-
+/*
 	TIM_ITConfig(TIM15, TIM_IT_CC2 | TIM_IT_Update, ENABLE);
 	TIM_ClearFlag(TIM15, TIM_IT_CC2 | TIM_IT_Update);
 
 	NVIC_ClearPendingIRQ(TIM15_IRQn);
 	NVIC_EnableIRQ(TIM15_IRQn);
-
+*/
 	TIM_DMACmd(TIM15, TIM_DMA_CC1, ENABLE);
 }
 
@@ -186,6 +186,7 @@ static void initCGRAM(void)
 			}
 		}
 	}
+	//buffer[len++] = 0x0002;	// return home
 
 	DMA_SetCurrDataCounter(DMA1_Channel5, len);
 	DMA_Cmd(DMA1_Channel5, ENABLE);
