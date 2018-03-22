@@ -15,6 +15,7 @@ void Sense_Init(void);
 void RPM_Init(void);
 void Control_Init(void);
 void Control_Set(uint8_t channel, uint16_t value);
+void Display_Update(void);
 
 #define NUM_CHANNELS 4
 
@@ -111,15 +112,14 @@ int main(int argc, char* argv[])
 
 	char *hello = " Hello World!";
 	char *test = "Test \xF4 \010\011\012\013\014\015\016\017";
-	char adc[17];
-	char pwm[17];
+	//char adc[17];
+	//char pwm[17];
 
 	LCD_Write(LCD_Line1, 0, hello, strlen(hello));
-	timer_sleep(10);
 	LCD_Write(LCD_Line2, 0, test, strlen(test));
+	LCD_Update();
 	timer_sleep(250);
 
-	char *loop = "\010\011\012\013\014\015\016\017\016\015\014\013\012\011\010\011\012\013\014\015\016\017";
 	size_t offset = 0;
 	size_t i = 0;
 
@@ -135,10 +135,8 @@ int main(int argc, char* argv[])
 		}
 		i++;
 		timer_sleep(250);
-		snprintf(adc, 17, "%3d %3d %3d %3d", adcValue[0], adcValue[1], adcValue[2], adcValue[3]);
-		LCD_Write(LCD_Line1, 0, adc, 16);
-		snprintf(pwm, 17, "%3d %3d %3d %3d", target_ADC[0], target_ADC[1], target_ADC[2], target_ADC[3]);
-		LCD_Write(LCD_Line2, 0, pwm, 16);
+
+		Display_Update();
 		offset = (offset + 1) % 14;
 	}
 }
@@ -146,6 +144,35 @@ int main(int argc, char* argv[])
 #pragma GCC diagnostic pop
 
 // ----------------------------------------------------------------------------
+
+void Display_Update(void)
+{
+	char line1[17];
+	char line2[17];
+
+	uint8_t ADC_Max = 170;	// 12V / 6 = 2V, 2V / 3V * 255 = 170
+	uint16_t RPM_Max = 5000;
+	uint16_t PWM_Max = 240;
+
+	uint8_t adc_target, adc_value, pwm_value, rpm_value;
+
+	const char *lookup1 = "        \010\011\012\013\014\015\016\017";
+	const char *lookup2 = "\010\011\012\013\014\015\016\017        ";
+
+	for (int i = 0; i < NUM_CHANNELS; i++) {
+		adc_target = 16 * target_ADC[i] / ADC_Max;
+		adc_value = 16 * adcValue[i] / ADC_Max;
+		pwm_value = 16 * *PWM[i] / PWM_Max;
+		rpm_value = 16 * rpm[i] / RPM_Max;
+		snprintf(&line1[4*i], 5, "%c%c%c%c ", lookup1[adc_target], lookup1[adc_value], lookup1[pwm_value], lookup1[rpm_value]);
+		snprintf(&line2[4*i], 5, "%c%c%c%c ", lookup2[adc_target], lookup2[adc_value], lookup2[pwm_value], lookup2[rpm_value]);
+	}
+
+	LCD_Write(LCD_Line1, 0, line1, 16);
+	LCD_Write(LCD_Line2, 0, line2, 16);
+	LCD_Update();
+}
+
 
 void Sense_Init(void)
 {

@@ -31,8 +31,6 @@ static void initTimer(void);
 static void initDMA(void);
 static void initCGRAM(void);
 
-static void refresh(void);
-
 void LCD_Init(void)
 {
 	initGPIO();
@@ -49,7 +47,7 @@ void LCD_Init(void)
 	buffer[LINE1OFFSET-1] = 0x0080;
 	buffer[LINE2OFFSET-1] = 0x00C0;
 
-	refresh();
+	LCD_Update();
 	timer_sleep(10);	// replace with DMA complete interrupt
 
 }
@@ -60,8 +58,19 @@ void LCD_Write(enum LCD_Line line, size_t position, char *str, size_t len)
 	for (unsigned i=0; i < len; i++) {
 		buffer[offset + i] = LCD_RS_PIN | (uint8_t)str[i];
 	}
+}
 
-	refresh();
+void LCD_Update(void)
+{
+	TIM_Cmd(TIM15, DISABLE);
+	DMA_Cmd(DMA1_Channel5, DISABLE);
+
+	DMA_SetCurrDataCounter(DMA1_Channel5, BUFFER_LENGTH);
+	DMA_Cmd(DMA1_Channel5, ENABLE);
+
+	TIM15->RCR = BUFFER_LENGTH-1;
+	TIM15->EGR = TIM_PSCReloadMode_Immediate;
+	TIM_Cmd(TIM15, ENABLE);
 }
 
 // private functions
@@ -183,19 +192,6 @@ static void initCGRAM(void)
 	DMA_SetCurrDataCounter(DMA1_Channel5, len);
 	DMA_Cmd(DMA1_Channel5, ENABLE);
 	TIM15->RCR = len-1;
-	TIM15->EGR = TIM_PSCReloadMode_Immediate;
-	TIM_Cmd(TIM15, ENABLE);
-}
-
-static void refresh(void)
-{
-	TIM_Cmd(TIM15, DISABLE);
-	DMA_Cmd(DMA1_Channel5, DISABLE);
-
-	DMA_SetCurrDataCounter(DMA1_Channel5, BUFFER_LENGTH);
-	DMA_Cmd(DMA1_Channel5, ENABLE);
-
-	TIM15->RCR = BUFFER_LENGTH-1;
 	TIM15->EGR = TIM_PSCReloadMode_Immediate;
 	TIM_Cmd(TIM15, ENABLE);
 }
