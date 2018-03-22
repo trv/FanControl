@@ -64,7 +64,6 @@ void LCD_Write(enum LCD_Line line, size_t position, char *str, size_t len)
 	refresh();
 }
 
-
 // private functions
 
 static void initGPIO(void)
@@ -138,12 +137,6 @@ static void initTimer(void)
 	TIM_CtrlPWMOutputs(TIM15, ENABLE);
 	TIM_SelectOnePulseMode(TIM15, TIM_OPMode_Single);
 
-	TIM_ITConfig(TIM15, TIM_IT_CC2 | TIM_IT_Update, ENABLE);
-	TIM_ClearFlag(TIM15, TIM_IT_CC2 | TIM_IT_Update);
-
-	NVIC_ClearPendingIRQ(TIM15_IRQn);
-	NVIC_EnableIRQ(TIM15_IRQn);
-
 	TIM_DMACmd(TIM15, TIM_DMA_CC1, ENABLE);
 }
 
@@ -206,16 +199,3 @@ static void refresh(void)
 	TIM15->EGR = TIM_PSCReloadMode_Immediate;
 	TIM_Cmd(TIM15, ENABLE);
 }
-
-void TIM15_IRQHandler(void);
-void TIM15_IRQHandler(void)
-{
-	if (TIM_GetFlagStatus(TIM15, TIM_FLAG_CC2) == SET) {
-		TIM_ClearFlag(TIM15, TIM_FLAG_CC2);
-	}
-
-	if (TIM_GetFlagStatus(TIM15, TIM_FLAG_Update) == SET) {
-		TIM_ClearFlag(TIM15, TIM_FLAG_Update);
-	}
-}
-

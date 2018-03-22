@@ -16,43 +16,61 @@ void RPM_Init(void);
 void Control_Init(void);
 void Control_Set(uint8_t channel, uint16_t value);
 
-static uint16_t rpm[4] = {0};
-static uint16_t lastCount[4] = {0};
-static uint16_t delta[4] = {0};
-static uint8_t valid[4] = {0};
+#define NUM_CHANNELS 4
 
-static uint16_t target_ADC = 67;	// 4.5V
-static int errorP_ADC = 0;
-static int errorI_ADC = 0;
-static int errorD_ADC = 0;
-
-// ----- main() ---------------------------------------------------------------
+static uint16_t rpm[NUM_CHANNELS] = {0};
+static uint16_t lastCount[NUM_CHANNELS] = {0};
+static uint16_t delta[NUM_CHANNELS] = {0};
+static uint8_t valid[NUM_CHANNELS] = {0};
 
 /*
 
-ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, flag for completion?)
-TIM3: output PWM at 200kHz, update based on ADC or RPM values
-TIM2: measure RPM, periodically report
+ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, use half-full and complete flags)
+TIM2-3: output PWM at 200kHz, update based on ADC or RPM values
+TIMx?: timer for EXTI-triggered GPIO RPM sense pins (internal only)
 TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
-
+TIM15: LCD DMA timing
  */
-void ADC1_COMP_IRQHandler(void);
-void ADC1_COMP_IRQHandler(void)
+
+/*
+TODO:
+- support multiple channels (make everything arrays of channel values)
+
+- UI?
+- SMBUS?
+ */
+
+static volatile uint16_t target_ADC = 67;	// 4.5V
+static volatile int errorP_ADC = 0;
+static volatile int errorI_ADC = 0;
+static volatile int errorD_ADC = 0;
+static uint32_t lastSample = 0;
+static volatile uint16_t adcValue[1*2] = {0};
+
+void DMA1_Channel1_IRQHandler(void);
+void DMA1_Channel1_IRQHandler(void)
 {
-	// read ADC conversion result, compare against target value, update PWM output
-	static uint32_t lastSample = 0;
-	uint32_t sample = ADC1->DR;
+	size_t i = 0;
+	uint32_t flags = DMA1->ISR;
+	if (flags & DMA1_FLAG_HT1) {
+		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
+		i = 0;
+	} else if (flags & DMA1_FLAG_TC1) {
+		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
+		i = 1;
+	} else if (flags & DMA1_FLAG_TE1) {
+		// error
+		while (1);
+	}
 
-	errorP_ADC = target_ADC - sample;
+	// eventually switch to a for loop over all channels
+
+	errorP_ADC = target_ADC - adcValue[i];
 	errorI_ADC += errorP_ADC;
-	errorD_ADC = sample - lastSample;
+	errorD_ADC = adcValue[i] - lastSample;
 
-	lastSample = sample;
+	lastSample = adcValue[i];
 
-	// with 1uF output cap:
-	// int newPWM = 210 + errorP_ADC/16 + errorI_ADC/4096 + 0*errorD_ADC/64;
-
-	// with more output cap:
 	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
 		newPWM = 236;
@@ -69,6 +87,7 @@ void ADC1_COMP_IRQHandler(void)
 	}
 }
 
+// ----- main() ---------------------------------------------------------------
 
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
@@ -95,28 +114,28 @@ int main(int argc, char* argv[])
 	LCD_Write(LCD_Line1, 0, hello, strlen(hello));
 	timer_sleep(10);
 	LCD_Write(LCD_Line2, 0, test, strlen(test));
+	timer_sleep(250);
 
 	char *loop = "\010\011\012\013\014\015\016\017\016\015\014\013\012\011\010\011\012\013\014\015\016\017";
 	size_t offset = 0;
+	size_t i = 0;
 
 	RPM_Init();
 	Control_Init();
 	Sense_Init();
 
 	for (;;) {
-		if (offset & 0x01) {
-			target_ADC = 67;
+		if (i & 0x10) {
+			target_ADC = 68;
 		} else {
-			target_ADC = 59;
+			target_ADC = 60;
 		}
-		timer_sleep(1000);
-		uint16_t adcValue = (ADC_GetConversionValue(ADC1) * 68);
-		snprintf(adc, 17, "%5dmV %3d %3lu  ", adcValue, errorP_ADC, TIM3->CCR2);
+		i++;
+		timer_sleep(250);
+		snprintf(adc, 17, "%5dmV %4d %3lu  ", adcValue[0] * 68, target_ADC * 68, TIM3->CCR2);
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
-
-		//LCD_Write(LCD_Line2, 12, &loop[offset], 4);
 		offset = (offset + 1) % 14;
 	}
 }
@@ -143,6 +162,34 @@ void Sense_Init(void)
 		GPIO_Init(GPIOC, &GPIO_InitStructure);
 	}
 
+	// DMA config
+
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+
+	DMA_InitTypeDef DMA_InitStruct = {
+			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR,
+			.DMA_MemoryBaseAddr = (uint32_t)adcValue,
+			.DMA_DIR = DMA_DIR_PeripheralSRC,
+			.DMA_BufferSize = 2,
+			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,
+			.DMA_MemoryInc = DMA_MemoryInc_Enable,
+			.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
+			.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord,
+			.DMA_Mode = DMA_Mode_Circular,
+			.DMA_Priority = DMA_Priority_High,
+			.DMA_M2M = DMA_M2M_Disable,
+	};
+
+	// ADC uses channel 1 if not remapped
+	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
+	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
+	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
+
+	NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
+	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
+	DMA_Cmd(DMA1_Channel1, ENABLE);
+
 	// ADC config
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
@@ -156,21 +203,18 @@ void Sense_Init(void)
     };
 
     ADC_Init(ADC1, &ADC_InitStructure);
+
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
     ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
 
-	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
-	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
-
-	NVIC_ClearPendingIRQ(ADC1_COMP_IRQn);
-	NVIC_EnableIRQ(ADC1_COMP_IRQn);
-
     ADC_GetCalibrationFactor(ADC1);
+    ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
+    ADC_DMACmd(ADC1, ENABLE);
     ADC_Cmd(ADC1, ENABLE);
 	ADC_StartOfConversion(ADC1);
 }
 
-const uint32_t rpmPins[4] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
+const uint32_t rpmPins[NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
 GPIO_TypeDef *rpmPort = GPIOB;
 
 void RPM_Init(void)
@@ -186,7 +230,7 @@ void RPM_Init(void)
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < NUM_CHANNELS; i++) {
 		GPIO_InitStructure.GPIO_Pin = rpmPins[i];
 		GPIO_Init(rpmPort, &GPIO_InitStructure);
 	}
@@ -196,14 +240,15 @@ void RPM_Init(void)
 	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource8);
 
 	EXTI_InitTypeDef EXTI_InitStruct = {
-			.EXTI_Line = 0,
-			.EXTI_LineCmd = 0,
-			.EXTI_Mode = 0,
-			.EXTI_Trigger = 0	// TODO: configure these values
+			.EXTI_Line = EXTI_Line14,
+			.EXTI_Mode = EXTI_Mode_Interrupt,
+			.EXTI_Trigger = EXTI_Trigger_Rising_Falling,
+			.EXTI_LineCmd = ENABLE
 	};
 
 	EXTI_Init(&EXTI_InitStruct);
-
+	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
+	NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 	// TIM2 config - input capture
 	// RPM up to 4000 = 133Hz pulses @ 2 per revolution (~7.5ms)
@@ -213,71 +258,34 @@ void RPM_Init(void)
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 
 	TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct = {
-			.TIM_Prescaler = 480,	// 100 kHz clock
+			.TIM_Prescaler = 48,	// 1000 kHz clock (1us)
 			.TIM_CounterMode = TIM_CounterMode_Up,
-			.TIM_Period = 0xFFFF,
+			.TIM_Period = 0xFFFF,	// 65.536 ms period
 			.TIM_ClockDivision = TIM_CKD_DIV1,
 			.TIM_RepetitionCounter = 0,
 	};
 	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct);
 
-	TIM_ICInitTypeDef TIM_ICInitStruct = {
-			.TIM_Channel = TIM_Channel_1,
-			.TIM_ICPolarity = TIM_ICPolarity_BothEdge,
-			.TIM_ICSelection = TIM_ICSelection_DirectTI,
-			.TIM_ICPrescaler = TIM_ICPSC_DIV1,
-			.TIM_ICFilter = 3,
-	};
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_2;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_3;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-	TIM_ICInitStruct.TIM_Channel = TIM_Channel_4;
-	TIM_ICInit(TIM2, &TIM_ICInitStruct);
-
-	// interrupt config
-	uint16_t flags = TIM_IT_CC1 | TIM_IT_CC2 | TIM_IT_CC3 | TIM_IT_CC4; // | TIM_IT_Update;
-	TIM_ITConfig(TIM2, flags, ENABLE);
-	TIM_ClearFlag(TIM2, flags);
-
-	NVIC_ClearPendingIRQ(TIM2_IRQn);
-	NVIC_EnableIRQ(TIM2_IRQn);
-
 	TIM_Cmd(TIM2, ENABLE);
 }
 
-void TIM2_IRQHandler(void);
-void TIM2_IRQHandler(void)
+void EXTI4_15_IRQHandler(void);
+void EXTI4_15_IRQHandler(void)
 {
-
-	if (TIM2->SR & TIM_FLAG_CC1) {
-		uint16_t count = TIM2->CCR1;
-		uint8_t i = 0;
-		if (valid[i]) {
-			delta[i] = count - lastCount[i];
-			rpm[i] = 30000/delta[i];
-			lastCount[i] = count;
-		} else {
-			lastCount[i] = count;
-			valid[i] = 1;
-		}
-	}
-
-	if (TIM2->SR & TIM_FLAG_CC2) {
-		uint16_t count = TIM2->CCR2;
+	if (EXTI_GetFlagStatus(EXTI_Line14)) {
+		uint16_t count = TIM2->CNT;
 		uint8_t i = 1;
 		if (valid[i] && (count - lastCount[i]) > 400) {
 			delta[i] = count - lastCount[i];
-			uint16_t newRPM = 1500000/delta[i];
+			uint16_t newRPM = 15000000/delta[i];
 			rpm[i] = (newRPM + (rpm[i] * 3))/4;
 			lastCount[i] = count;
 		} else {
 			lastCount[i] = count;
 			valid[i] = 1;
 		}
+		EXTI_ClearFlag(EXTI_Line14);
 	}
-
 }
 
 void Control_Init(void)
