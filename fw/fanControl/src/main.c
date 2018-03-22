@@ -14,11 +14,11 @@
 void Sense_Init(void);
 void RPM_Init(void);
 void Control_Init(void);
-void Control_Set(uint8_t channel, uint16_t value);
 void Display_Update(void);
 
 #define NUM_CHANNELS 4
 
+static volatile uint16_t rpmMax[NUM_CHANNELS] = {0};
 static volatile uint16_t rpm[NUM_CHANNELS] = {0};
 static volatile uint16_t lastCount[NUM_CHANNELS] = {0};
 static volatile uint16_t delta[NUM_CHANNELS] = {0};
@@ -35,11 +35,17 @@ TIM15: LCD DMA timing
 
 /*
 TODO:
+- pulse-skipping for 100% duty cycle? need to periodically output high to discharge cap
+- better RPM algorithm (report 0 when pulses stop, nicer filtering, disable interrupts after each edge?)
+- RPM feedback loop to control voltage based on desired RPM
+- fan hotplug detection (add, remove, stalled, etc)
+
 - UI?
 - SMBUS?
  */
 
-static volatile uint16_t target_ADC[NUM_CHANNELS] = {60, 60, 113, 113};		// 85 = 6V
+// start fans at full speed to measure max RPM for each channel
+static volatile uint16_t target_ADC[NUM_CHANNELS] = {170, 170, 170, 170};
 static volatile int errorP_ADC[NUM_CHANNELS] = {0};
 static volatile int errorI_ADC[NUM_CHANNELS] = {0};
 static volatile uint16_t adcValue[2*NUM_CHANNELS] = {0};
@@ -54,7 +60,7 @@ void DMA1_Channel1_IRQHandler(void)
 	if (flags & DMA1_FLAG_HT1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
 		offset = 0;
-		return;
+		return;	// only processing every other ADC sample due to CPU processing power
 	} else if (flags & DMA1_FLAG_TC1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
 		offset = NUM_CHANNELS;
@@ -74,7 +80,7 @@ void DMA1_Channel1_IRQHandler(void)
 		} else if (newPWM < 0) {
 			newPWM = 0;
 		}
-		*PWM[i] = newPWM;
+		*(PWM[i]) = newPWM;
 
 		// prevent integral wind-up
 		if (errorI_ADC[i]/128 > 236) {
@@ -99,15 +105,12 @@ int main(int argc, char* argv[])
 	//DBGMCU_Config(DBGMCU_TIM15_STOP, ENABLE);
 
 	timer_start();
-
 	timer_sleep(100);
 
 	LCD_Init();
 
 	char *hello = " Hello World!";
 	char *test = "Test \xF4 \010\011\012\013\014\015\016\017";
-	//char adc[17];
-	//char pwm[17];
 
 	LCD_Write(LCD_Line1, 0, hello, strlen(hello));
 	LCD_Write(LCD_Line2, 0, test, strlen(test));
@@ -122,12 +125,16 @@ int main(int argc, char* argv[])
 	Sense_Init();
 
 	for (;;) {
-		if (i & 0x10) {
-			target_ADC[0] = 60;
-			target_ADC[1] = 113;
-		} else {
-			target_ADC[0] = 113;
-			target_ADC[1] = 60;
+		if (i > 8) {
+			if (i & 0x10) {
+				target_ADC[0] = 60;
+				target_ADC[1] = 113;
+			} else {
+				target_ADC[0] = 113;
+				target_ADC[1] = 60;
+			}
+			target_ADC[2] = 85;
+			target_ADC[3] = 85;
 		}
 		i++;
 		timer_sleep(250);
@@ -147,7 +154,6 @@ void Display_Update(void)
 	char line2[17];
 
 	uint8_t ADC_Max = 170;	// 12V / 6 = 2V, 2V / 3V * 255 = 170
-	uint16_t RPM_Max = 5000;
 	uint16_t PWM_Max = 240;
 
 	uint8_t adc_target, adc_value, pwm_value, rpm_value;
@@ -156,10 +162,10 @@ void Display_Update(void)
 	const char *lookup2 = "\010\011\012\013\014\015\016\017        ";
 
 	for (int i = 0; i < NUM_CHANNELS; i++) {
-		adc_target = 16 * target_ADC[i] / ADC_Max;
-		adc_value = 16 * adcValue[i] / ADC_Max;
-		pwm_value = 16 * *PWM[i] / PWM_Max;
-		rpm_value = 16 * rpm[i] / RPM_Max;
+		adc_target = 15 * target_ADC[i] / ADC_Max;
+		adc_value = 15 * adcValue[i] / ADC_Max;
+		pwm_value = 15 * *PWM[i] / PWM_Max;
+		rpm_value = 15 * rpm[i] / rpmMax[i];
 		snprintf(&line1[4*i], 5, "%c%c%c%c ", lookup1[adc_target], lookup1[adc_value], lookup1[pwm_value], lookup1[rpm_value]);
 		snprintf(&line2[4*i], 5, "%c%c%c%c ", lookup2[adc_target], lookup2[adc_value], lookup2[pwm_value], lookup2[rpm_value]);
 	}
@@ -316,6 +322,9 @@ void EXTI4_15_IRQHandler(void)
 				delta[i] = count - lastCount[i];
 				uint16_t newRPM = 15000000/delta[i];
 				rpm[i] = (newRPM + (rpm[i] * 3))/4;
+				if (rpm[i] > rpmMax[i]) {
+					rpmMax[i] = rpm[i];
+				}
 				lastCount[i] = count;
 			} else {
 				lastCount[i] = count;
@@ -384,18 +393,3 @@ void Control_Init(void)
 
 	TIM_Cmd(TIM3, ENABLE);
 }
-
-void Control_Set(uint8_t channel, uint16_t value)
-{
-	switch (channel) {
-	case 1: TIM_SetCompare1(TIM3, value); break;
-	case 2: TIM_SetCompare2(TIM3, value); break;
-	case 3: TIM_SetCompare3(TIM3, value); break;
-	case 4: TIM_SetCompare4(TIM3, value); break;
-	}
-}
-
-
-
-
-
