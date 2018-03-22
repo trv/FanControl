@@ -40,50 +40,53 @@ TODO:
 - SMBUS?
  */
 
-static volatile uint16_t target_ADC = 67;	// 4.5V
-static volatile int errorP_ADC = 0;
-static volatile int errorI_ADC = 0;
-static volatile int errorD_ADC = 0;
-static volatile uint32_t lastSample = 0;
-static volatile uint16_t adcValue[1*2] = {0};
+static volatile uint16_t target_ADC[NUM_CHANNELS] = {60, 67, 0, 0};
+static volatile int errorP_ADC[NUM_CHANNELS] = {0};
+static volatile int errorI_ADC[NUM_CHANNELS] = {0};
+static volatile int errorD_ADC[NUM_CHANNELS] = {0};
+static volatile uint32_t lastSample[NUM_CHANNELS] = {0};
+static volatile uint16_t adcValue[2*NUM_CHANNELS] = {0};
+
+static volatile uint32_t *PWM[NUM_CHANNELS] = {&(TIM3->CCR1), &(TIM3->CCR2), &(TIM3->CCR3), &(TIM3->CCR4)};
 
 void DMA1_Channel1_IRQHandler(void);
 void DMA1_Channel1_IRQHandler(void)
 {
-	size_t i = 0;
+	size_t offset = 0;
 	uint32_t flags = DMA1->ISR;
 	if (flags & DMA1_FLAG_HT1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
-		i = 0;
+		offset = 0;
 	} else if (flags & DMA1_FLAG_TC1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
-		i = 1;
+		offset = NUM_CHANNELS;
 	} else if (flags & DMA1_FLAG_TE1) {
 		// error
 		while (1);
 	}
 
-	// eventually switch to a for loop over all channels
+	for (int i = 0; i < NUM_CHANNELS; i++) {
 
-	errorP_ADC = target_ADC - adcValue[i];
-	errorI_ADC += errorP_ADC;
-	errorD_ADC = adcValue[i] - lastSample;
+		errorP_ADC[i] = target_ADC[i] - adcValue[offset + i];
+		errorI_ADC[i] += errorP_ADC[i];
+		//errorD_ADC[i] = adcValue[offset+i] - lastSample[i];
 
-	lastSample = adcValue[i];
+		//lastSample[i] = adcValue[offset+i];
 
-	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
-	if (newPWM > 236) {
-		newPWM = 236;
-	} else if (newPWM < 0) {
-		newPWM = 0;
-	}
-	TIM3->CCR2 = newPWM;
+		int newPWM = errorP_ADC[i]*2 + errorI_ADC[i]/128; // + 0*errorD_ADC[i]/64;
+		if (newPWM > 236) {
+			newPWM = 236;
+		} else if (newPWM < 0) {
+			newPWM = 0;
+		}
+		*PWM[i] = newPWM;
 
-	// prevent integral wind-up
-	if (errorI_ADC/128 > 236) {
-		errorI_ADC = 236*128;
-	} else if (errorI_ADC < 0) {
-		errorI_ADC = 0;
+		// prevent integral wind-up
+		if (errorI_ADC[i]/128 > 236) {
+			errorI_ADC[i] = 236*128;
+		} else if (errorI_ADC[i] < 0) {
+			errorI_ADC[i] = 0;
+		}
 	}
 }
 
@@ -126,15 +129,15 @@ int main(int argc, char* argv[])
 
 	for (;;) {
 		if (i & 0x10) {
-			target_ADC = 68;
+			target_ADC[1] = 68;
 		} else {
-			target_ADC = 60;
+			target_ADC[1] = 60;
 		}
 		i++;
 		timer_sleep(250);
-		snprintf(adc, 17, "%5dmV %4d %3lu  ", adcValue[0] * 68, target_ADC * 68, TIM3->CCR2);
+		snprintf(adc, 17, "%3d %3d %3d %3d", adcValue[0], adcValue[1], adcValue[2], adcValue[3]);
 		LCD_Write(LCD_Line1, 0, adc, 16);
-		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
+		snprintf(pwm, 17, "%3d %3d %3d %3d", target_ADC[0], target_ADC[1], target_ADC[2], target_ADC[3]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
 		offset = (offset + 1) % 14;
 	}
@@ -170,7 +173,7 @@ void Sense_Init(void)
 			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->DR,
 			.DMA_MemoryBaseAddr = (uint32_t)adcValue,
 			.DMA_DIR = DMA_DIR_PeripheralSRC,
-			.DMA_BufferSize = 2,
+			.DMA_BufferSize = 2*NUM_CHANNELS,
 			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,
 			.DMA_MemoryInc = DMA_MemoryInc_Enable,
 			.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
@@ -200,13 +203,16 @@ void Sense_Init(void)
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
 		.ADC_DataAlign = ADC_DataAlign_Left,
-		.ADC_ScanDirection = ADC_ScanDirection_Upward
+		.ADC_ScanDirection = ADC_ScanDirection_Backward
     };
 
     ADC_Init(ADC1, &ADC_InitStructure);
 
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
+    ADC_ChannelConfig(ADC1, ADC_Channel_13, ADC_SampleTime_7_5Cycles);
     ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_11, ADC_SampleTime_7_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_10, ADC_SampleTime_7_5Cycles);
 
     ADC_GetCalibrationFactor(ADC1);
     ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
@@ -215,7 +221,8 @@ void Sense_Init(void)
 	ADC_StartOfConversion(ADC1);
 }
 
-const uint32_t rpmPins[NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9};
+const uint32_t rpmPins[NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9}; // config alternate EXTI handler for GPIO 0-3
+const uint8_t rpm_exti_pinSource[NUM_CHANNELS] = {EXTI_PinSource13, EXTI_PinSource14, EXTI_PinSource8, EXTI_PinSource9};
 GPIO_TypeDef *rpmPort = GPIOB;
 
 void RPM_Init(void)
@@ -238,16 +245,21 @@ void RPM_Init(void)
 
 	// EXTI Config
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
-	SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, EXTI_PinSource14);
+	for (int i = 0; i < NUM_CHANNELS; i++) {
+		SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, rpm_exti_pinSource[i]);
+	}
 
 	EXTI_InitTypeDef EXTI_InitStruct = {
-			.EXTI_Line = EXTI_Line14,
 			.EXTI_Mode = EXTI_Mode_Interrupt,
 			.EXTI_Trigger = EXTI_Trigger_Rising_Falling,
 			.EXTI_LineCmd = ENABLE
 	};
 
-	EXTI_Init(&EXTI_InitStruct);
+	for (int i = 0; i < NUM_CHANNELS; i++) {
+		EXTI_InitStruct.EXTI_Line = rpmPins[i];
+		EXTI_Init(&EXTI_InitStruct);
+	}
+
 	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
 	NVIC_EnableIRQ(EXTI4_15_IRQn);
 
@@ -273,19 +285,21 @@ void RPM_Init(void)
 void EXTI4_15_IRQHandler(void);
 void EXTI4_15_IRQHandler(void)
 {
-	if (EXTI_GetFlagStatus(EXTI_Line14)) {
-		uint16_t count = TIM2->CNT;
-		uint8_t i = 1;
-		if (valid[i] && (count - lastCount[i]) > 4000) {
-			delta[i] = count - lastCount[i];
-			uint16_t newRPM = 15000000/delta[i];
-			rpm[i] = (newRPM + (rpm[i] * 3))/4;
-			lastCount[i] = count;
-		} else {
-			lastCount[i] = count;
-			valid[i] = 1;
+	uint16_t count = TIM2->CNT;
+
+	for (int i = 0; i < NUM_CHANNELS; i++) {
+		if (EXTI_GetFlagStatus(rpmPins[i])) {
+			if (valid[i] && (count - lastCount[i]) > 4000) {
+				delta[i] = count - lastCount[i];
+				uint16_t newRPM = 15000000/delta[i];
+				rpm[i] = (newRPM + (rpm[i] * 3))/4;
+				lastCount[i] = count;
+			} else {
+				lastCount[i] = count;
+				valid[i] = 1;
+			}
+			EXTI_ClearFlag(rpmPins[i]);
 		}
-		EXTI_ClearFlag(EXTI_Line14);
 	}
 }
 
@@ -303,7 +317,7 @@ void Control_Init(void)
 	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
 	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
 
-	for (int i = 7; i < 8; i++) {
+	for (int i = 6; i < 10; i++) {
 		GPIO_InitStructure.GPIO_Pin = (uint32_t)((0x01) << i);
 		GPIO_Init(GPIOC, &GPIO_InitStructure);
 		GPIO_PinAFConfig(GPIOC, i, GPIO_AF_0);
@@ -326,17 +340,21 @@ void Control_Init(void)
 			.TIM_OCMode = TIM_OCMode_PWM2,
 			.TIM_OutputState = TIM_OutputState_Enable,
 			.TIM_OutputNState = TIM_OutputNState_Disable,
-			.TIM_Pulse = (48*5)/4,
+			.TIM_Pulse = 0,
 			.TIM_OCPolarity = TIM_OCPolarity_High,
 			.TIM_OCNPolarity = TIM_OCNPolarity_High,
 			.TIM_OCIdleState = TIM_OCIdleState_Set,
 			.TIM_OCNIdleState = TIM_OCNIdleState_Set,
 	};
 
-	//TIM_OC1Init(TIM3, &TIM_OCInitStruct);
-	//TIM_OC1PreloadConfig(TIM3, TIM_OCPreload_Enable);
+	TIM_OC1Init(TIM3, &TIM_OCInitStruct);
+	TIM_OC1PreloadConfig(TIM3, TIM_OCPreload_Enable);
 	TIM_OC2Init(TIM3, &TIM_OCInitStruct);
 	TIM_OC2PreloadConfig(TIM3, TIM_OCPreload_Enable);
+	TIM_OC3Init(TIM3, &TIM_OCInitStruct);
+	TIM_OC3PreloadConfig(TIM3, TIM_OCPreload_Enable);
+	TIM_OC4Init(TIM3, &TIM_OCInitStruct);
+	TIM_OC4PreloadConfig(TIM3, TIM_OCPreload_Enable);
 
 	TIM_SelectOnePulseMode(TIM3, TIM_OPMode_Repetitive);
 	TIM_SelectOutputTrigger(TIM3, TIM_TRGOSource_Update);
