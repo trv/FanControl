@@ -48,19 +48,20 @@ static volatile int errorP_ADC = 0;
 static volatile int errorI_ADC = 0;
 static volatile int errorD_ADC = 0;
 static uint32_t lastSample = 0;
-static volatile uint32_t adcValue = 0;
+static volatile uint16_t adcValue[NUM_CHANNELS*2] = {0};
 
 void ADC1_COMP_IRQHandler(void);
 void ADC1_COMP_IRQHandler(void)
 {
+	size_t i = 0;
 	// read ADC conversion result, compare against target value, update PWM output
-	adcValue = ADC1->DR;    // reading ADC1->DR also clears interrupt flag
+	adcValue[i] = ADC1->DR;    // reading ADC1->DR also clears interrupt flag
 
-	errorP_ADC = target_ADC - adcValue;
+	errorP_ADC = target_ADC - adcValue[i];
 	errorI_ADC += errorP_ADC;
-	errorD_ADC = adcValue - lastSample;
+	errorD_ADC = adcValue[i] - lastSample;
 
-	lastSample = adcValue;
+	lastSample = adcValue[i];
 
 	int newPWM = 0 + errorP_ADC*2 + errorI_ADC/128 + 0*errorD_ADC/64;
 	if (newPWM > 236) {
@@ -116,13 +117,13 @@ int main(int argc, char* argv[])
 
 	for (;;) {
 		if (i & 0x08) {
-			target_ADC = 44;		// 68;
+			target_ADC = 88;		// 68;
 		} else {
 			target_ADC = 60;
 		}
 		i++;
 		timer_sleep(250);
-		snprintf(adc, 17, "%5lumV %4d %3lu  ", adcValue * 68, target_ADC * 68, TIM3->CCR2);
+		snprintf(adc, 17, "%5dmV %4d %3lu  ", adcValue[0] * 68, target_ADC * 68, TIM3->CCR2);
 		LCD_Write(LCD_Line1, 0, adc, 16);
 		snprintf(pwm, 17, "%3lu%% %6d %s", (100*TIM3->CCR2)/240, rpm[1], &loop[offset]);
 		LCD_Write(LCD_Line2, 0, pwm, 16);
@@ -155,25 +156,27 @@ void Sense_Init(void)
 	}
 
 	// DMA config
-/*
+
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
 
 	DMA_InitTypeDef DMA_InitStruct = {
 			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->CR,
-			.DMA_MemoryBaseAddr = (uint32_t)&buffer,
-			.DMA_DIR = DMA_DIR_PeripheralDST,
-			.DMA_BufferSize = sizeof(buffer),
+			.DMA_MemoryBaseAddr = (uint32_t)&adcValue,
+			.DMA_DIR = DMA_DIR_PeripheralSRC,
+			.DMA_BufferSize = sizeof(adcValue),
 			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,
 			.DMA_MemoryInc = DMA_MemoryInc_Enable,
 			.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
 			.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord,
-			.DMA_Mode = DMA_Mode_Normal,
-			.DMA_Priority = DMA_Priority_Medium,
+			.DMA_Mode = DMA_Mode_Circular,
+			.DMA_Priority = DMA_Priority_High,
 			.DMA_M2M = DMA_M2M_Disable,
 	};
 
-	DMA_Init(DMA1_Channel5, &DMA_InitStruct);
-*/
+	// ADC uses channel 1 if not remapped
+	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
+	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
+	DMA_Cmd(DMA1_Channel1, ENABLE);
 
 	// ADC config
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
@@ -193,7 +196,6 @@ void Sense_Init(void)
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
     ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
 
-
 	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
 	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
 
@@ -202,6 +204,7 @@ void Sense_Init(void)
 
     ADC_GetCalibrationFactor(ADC1);
     ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
+    ADC_DMACmd(ADC1, ENABLE);
     ADC_Cmd(ADC1, ENABLE);
 	ADC_StartOfConversion(ADC1);
 }
