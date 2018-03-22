@@ -25,7 +25,7 @@ static uint8_t valid[NUM_CHANNELS] = {0};
 
 /*
 
-ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, flag for completion?)
+ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, use half-full and complete flags)
 TIM2-3: output PWM at 200kHz, update based on ADC or RPM values
 TIMx?: timer for EXTI-triggered GPIO RPM sense pins (internal only)
 TIM14: trigger display refresh with latest ADC/PWM out/RPM in values
@@ -34,13 +34,10 @@ TIM15: LCD DMA timing
 
 /*
 TODO:
-- ADC DMA stuff w/ ISR trigger on completion, double-buffered?
 - support multiple channels (make everything arrays of channel values)
-
 
 - UI?
 - SMBUS?
-
  */
 
 static volatile uint16_t target_ADC = 67;	// 4.5V
@@ -129,7 +126,7 @@ int main(int argc, char* argv[])
 
 	for (;;) {
 		if (i & 0x10) {
-			target_ADC = 68;		// 68;
+			target_ADC = 68;
 		} else {
 			target_ADC = 60;
 		}
