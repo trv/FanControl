@@ -48,14 +48,25 @@ static volatile int errorP_ADC = 0;
 static volatile int errorI_ADC = 0;
 static volatile int errorD_ADC = 0;
 static uint32_t lastSample = 0;
-static volatile uint16_t adcValue[NUM_CHANNELS*2] = {0};
+static volatile uint16_t adcValue[1*2] = {0};
 
-void ADC1_COMP_IRQHandler(void);
-void ADC1_COMP_IRQHandler(void)
+void DMA1_Channel1_IRQHandler(void);
+void DMA1_Channel1_IRQHandler(void)
 {
 	size_t i = 0;
-	// read ADC conversion result, compare against target value, update PWM output
-	adcValue[i] = ADC1->DR;    // reading ADC1->DR also clears interrupt flag
+	uint32_t flags = DMA1->ISR;
+	if (flags & DMA1_FLAG_HT1) {
+		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
+		i = 0;
+	} else if (flags & DMA1_FLAG_TC1) {
+		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
+		i = 1;
+	} else if (flags & DMA1_FLAG_TE1) {
+		// error
+		while (1);
+	}
+
+	// eventually switch to a for loop over all channels
 
 	errorP_ADC = target_ADC - adcValue[i];
 	errorI_ADC += errorP_ADC;
@@ -116,8 +127,8 @@ int main(int argc, char* argv[])
 	Sense_Init();
 
 	for (;;) {
-		if (i & 0x08) {
-			target_ADC = 88;		// 68;
+		if (i & 0x10) {
+			target_ADC = 68;		// 68;
 		} else {
 			target_ADC = 60;
 		}
@@ -163,7 +174,7 @@ void Sense_Init(void)
 			.DMA_PeripheralBaseAddr = (uint32_t)&ADC1->CR,
 			.DMA_MemoryBaseAddr = (uint32_t)&adcValue,
 			.DMA_DIR = DMA_DIR_PeripheralSRC,
-			.DMA_BufferSize = sizeof(adcValue),
+			.DMA_BufferSize = 2,
 			.DMA_PeripheralInc = DMA_PeripheralInc_Disable,
 			.DMA_MemoryInc = DMA_MemoryInc_Enable,
 			.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
@@ -176,6 +187,11 @@ void Sense_Init(void)
 	// ADC uses channel 1 if not remapped
 	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
 	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
+	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
+
+	NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
+	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+
 	DMA_Cmd(DMA1_Channel1, ENABLE);
 
 	// ADC config
@@ -191,16 +207,9 @@ void Sense_Init(void)
     };
 
     ADC_Init(ADC1, &ADC_InitStructure);
-    ADC_TempSensorCmd(ENABLE);
 
     ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
     ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
-
-	ADC_ITConfig(ADC1, ADC_IT_EOC, ENABLE);
-	ADC_ClearFlag(ADC1, ADC_FLAG_EOC);
-
-	NVIC_ClearPendingIRQ(ADC1_COMP_IRQn);
-	NVIC_EnableIRQ(ADC1_COMP_IRQn);
 
     ADC_GetCalibrationFactor(ADC1);
     ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
