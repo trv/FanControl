@@ -35,17 +35,13 @@ TIM15: LCD DMA timing
 
 /*
 TODO:
-- support multiple channels (make everything arrays of channel values)
-
 - UI?
 - SMBUS?
  */
 
-static volatile uint16_t target_ADC[NUM_CHANNELS] = {60, 67, 0, 0};
+static volatile uint16_t target_ADC[NUM_CHANNELS] = {60, 60, 113, 113};		// 85 = 6V
 static volatile int errorP_ADC[NUM_CHANNELS] = {0};
 static volatile int errorI_ADC[NUM_CHANNELS] = {0};
-static volatile int errorD_ADC[NUM_CHANNELS] = {0};
-static volatile uint32_t lastSample[NUM_CHANNELS] = {0};
 static volatile uint16_t adcValue[2*NUM_CHANNELS] = {0};
 
 static volatile uint32_t *PWM[NUM_CHANNELS] = {&(TIM3->CCR1), &(TIM3->CCR2), &(TIM3->CCR3), &(TIM3->CCR4)};
@@ -58,6 +54,7 @@ void DMA1_Channel1_IRQHandler(void)
 	if (flags & DMA1_FLAG_HT1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
 		offset = 0;
+		return;
 	} else if (flags & DMA1_FLAG_TC1) {
 		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
 		offset = NUM_CHANNELS;
@@ -70,11 +67,8 @@ void DMA1_Channel1_IRQHandler(void)
 
 		errorP_ADC[i] = target_ADC[i] - adcValue[offset + i];
 		errorI_ADC[i] += errorP_ADC[i];
-		//errorD_ADC[i] = adcValue[offset+i] - lastSample[i];
 
-		//lastSample[i] = adcValue[offset+i];
-
-		int newPWM = errorP_ADC[i]*2 + errorI_ADC[i]/128; // + 0*errorD_ADC[i]/64;
+		int newPWM = errorP_ADC[i]*2 + errorI_ADC[i]/128;
 		if (newPWM > 236) {
 			newPWM = 236;
 		} else if (newPWM < 0) {
@@ -129,8 +123,10 @@ int main(int argc, char* argv[])
 
 	for (;;) {
 		if (i & 0x10) {
-			target_ADC[1] = 68;
+			target_ADC[0] = 60;
+			target_ADC[1] = 113;
 		} else {
+			target_ADC[0] = 113;
 			target_ADC[1] = 60;
 		}
 		i++;
@@ -225,11 +221,11 @@ void Sense_Init(void)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_6b,
+		.ADC_Resolution = ADC_Resolution_8b,
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Left,
+		.ADC_DataAlign = ADC_DataAlign_Right,
 		.ADC_ScanDirection = ADC_ScanDirection_Backward
     };
 
