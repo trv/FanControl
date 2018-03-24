@@ -73,7 +73,7 @@ void DMA1_Channel1_IRQHandler(void)
 			errorI_ADC[i] = 0;
 		}
 
-		int newPWM = (errorP_ADC[i]<<1) + (errorI_ADC[i]>>7);
+		int newPWM = (errorP_ADC[i]<<4) + (errorI_ADC[i]>>7);
 
 		if (newPWM > 236) {
 			newPWM = 236;
