@@ -129,6 +129,9 @@ int main(int argc, char* argv[])
 			.GPIO_PuPd = GPIO_PuPd_NOPULL,
 	};
 	GPIO_WriteBit(GPIOB, GPIO_Pin_12, Bit_RESET);
+	GPIO_WriteBit(GPIOB, GPIO_Pin_11, Bit_RESET);
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
 	GPIO_Init(GPIOB, &GPIO_InitStructure);
 
 	for (;;) {
@@ -298,6 +301,7 @@ void RPM_Init(void)
 	}
 
 	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
+	NVIC_SetPriority(EXTI4_15_IRQn, 3);
 	NVIC_EnableIRQ(EXTI4_15_IRQn);
 
 	// TIM2 config - input capture
@@ -322,6 +326,8 @@ void RPM_Init(void)
 void EXTI4_15_IRQHandler(void);
 void EXTI4_15_IRQHandler(void)
 {
+	GPIOB->BSRR = GPIO_Pin_11;
+
 	uint16_t count = TIM2->CNT;
 
 	for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -341,6 +347,8 @@ void EXTI4_15_IRQHandler(void)
 			EXTI_ClearFlag(rpmPins[i]);
 		}
 	}
+	GPIOB->BRR = GPIO_Pin_11;
+
 }
 
 void Control_Init(void)
