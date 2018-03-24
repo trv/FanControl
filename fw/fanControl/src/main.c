@@ -46,49 +46,45 @@ TODO:
 
 // start fans at full speed to measure max RPM for each channel
 static volatile uint16_t target_ADC[NUM_CHANNELS] = {170, 170, 170, 170};
-static volatile int errorP_ADC[NUM_CHANNELS] = {0};
-static volatile int errorI_ADC[NUM_CHANNELS] = {0};
-static volatile uint16_t adcValue[2*NUM_CHANNELS] = {0};
+static int16_t errorP_ADC[NUM_CHANNELS] = {0};
+static int16_t errorI_ADC[NUM_CHANNELS] = {0};
+static uint16_t adcValue[2*NUM_CHANNELS] = {0};
 
 static volatile uint32_t *PWM[NUM_CHANNELS] = {&(TIM3->CCR1), &(TIM3->CCR2), &(TIM3->CCR3), &(TIM3->CCR4)};
 
 void DMA1_Channel1_IRQHandler(void);
 void DMA1_Channel1_IRQHandler(void)
 {
-	size_t offset = 0;
+	GPIOB->BSRR = GPIO_Pin_12;
+
 	uint32_t flags = DMA1->ISR;
-	if (flags & DMA1_FLAG_HT1) {
-		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_HT1;
-		offset = 0;
-		return;	// only processing every other ADC sample due to CPU processing power
-	} else if (flags & DMA1_FLAG_TC1) {
-		DMA1->IFCR = DMA1_FLAG_GL1 | DMA1_FLAG_TC1;
-		offset = NUM_CHANNELS;
-	} else if (flags & DMA1_FLAG_TE1) {
-		// error
-		while (1);
-	}
+	size_t offset = (flags & DMA1_FLAG_TC1) << 1;
+	DMA1->IFCR = flags;
 
 	for (int i = 0; i < NUM_CHANNELS; i++) {
 
 		errorP_ADC[i] = target_ADC[i] - adcValue[offset + i];
 		errorI_ADC[i] += errorP_ADC[i];
 
-		int newPWM = errorP_ADC[i]*2 + errorI_ADC[i]/128;
+		// prevent integral wind-up
+		if (errorI_ADC[i] > 128*236) {
+			errorI_ADC[i] = 128*236;
+		} else if (errorI_ADC[i] < 0) {
+			errorI_ADC[i] = 0;
+		}
+
+		int newPWM = (errorP_ADC[i]<<1) + (errorI_ADC[i]>>7);
+
 		if (newPWM > 236) {
 			newPWM = 236;
 		} else if (newPWM < 0) {
 			newPWM = 0;
 		}
+
 		*(PWM[i]) = newPWM;
 
-		// prevent integral wind-up
-		if (errorI_ADC[i]/128 > 236) {
-			errorI_ADC[i] = 236*128;
-		} else if (errorI_ADC[i] < 0) {
-			errorI_ADC[i] = 0;
-		}
 	}
+	GPIOB->BRR = GPIO_Pin_12;
 }
 
 // ----- main() ---------------------------------------------------------------
@@ -123,6 +119,17 @@ int main(int argc, char* argv[])
 	RPM_Init();
 	Control_Init();
 	Sense_Init();
+
+	// Configure pin in output push/pull mode
+	GPIO_InitTypeDef GPIO_InitStructure = {
+			.GPIO_Pin = GPIO_Pin_12,
+			.GPIO_Speed = GPIO_Speed_Level_2,
+			.GPIO_Mode = GPIO_Mode_OUT,
+			.GPIO_OType = GPIO_OType_PP,
+			.GPIO_PuPd = GPIO_PuPd_NOPULL,
+	};
+	GPIO_WriteBit(GPIOB, GPIO_Pin_12, Bit_RESET);
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
 
 	for (;;) {
 		if (i > 8) {
@@ -216,7 +223,8 @@ void Sense_Init(void)
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
 	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
 	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
-	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
+	//DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
+	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_TE, ENABLE);
 
 	NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
 	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
@@ -227,11 +235,11 @@ void Sense_Init(void)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_8b,
+		.ADC_Resolution = ADC_Resolution_6b,
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Right,
+		.ADC_DataAlign = ADC_DataAlign_Left,
 		.ADC_ScanDirection = ADC_ScanDirection_Backward
     };
 
@@ -259,13 +267,13 @@ void RPM_Init(void)
 	// GPIO Config ------------------------
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
 
-	GPIO_InitTypeDef GPIO_InitStructure;
-
 	// Configure pin in output push/pull mode
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_Level_2;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+	GPIO_InitTypeDef GPIO_InitStructure = {
+			.GPIO_Speed = GPIO_Speed_Level_2,
+			.GPIO_Mode = GPIO_Mode_IN,
+			.GPIO_OType = GPIO_OType_PP,
+			.GPIO_PuPd = GPIO_PuPd_UP,
+	};
 
 	for (int i = 0; i < NUM_CHANNELS; i++) {
 		GPIO_InitStructure.GPIO_Pin = rpmPins[i];
