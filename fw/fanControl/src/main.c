@@ -226,8 +226,7 @@ void Sense_Init(void)
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
 	SYSCFG_DMAChannelRemapConfig(SYSCFG_DMARemap_ADC1, DISABLE);
 	DMA_Init(DMA1_Channel1, &DMA_InitStruct);
-	//DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
-	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_TE, ENABLE);
+	DMA_ITConfig(DMA1_Channel1, DMA_IT_TC | DMA_IT_HT | DMA_IT_TE, ENABLE);
 
 	NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
 	NVIC_EnableIRQ(DMA1_Channel1_IRQn);
@@ -238,21 +237,21 @@ void Sense_Init(void)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1, ENABLE);
 
     ADC_InitTypeDef ADC_InitStructure = {
-		.ADC_Resolution = ADC_Resolution_6b,
+		.ADC_Resolution = ADC_Resolution_8b,
 		.ADC_ContinuousConvMode = DISABLE,
 		.ADC_ExternalTrigConv = ADC_ExternalTrigConv_T3_TRGO,
 		.ADC_ExternalTrigConvEdge = ADC_ExternalTrigConvEdge_Rising,
-		.ADC_DataAlign = ADC_DataAlign_Left,
+		.ADC_DataAlign = ADC_DataAlign_Right,
 		.ADC_ScanDirection = ADC_ScanDirection_Backward
     };
 
     ADC_Init(ADC1, &ADC_InitStructure);
 
-    ADC_ClockModeConfig(ADC1, ADC_ClockMode_AsynClk);
-    ADC_ChannelConfig(ADC1, ADC_Channel_13, ADC_SampleTime_7_5Cycles);
-    ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_7_5Cycles);
-    ADC_ChannelConfig(ADC1, ADC_Channel_11, ADC_SampleTime_7_5Cycles);
-    ADC_ChannelConfig(ADC1, ADC_Channel_10, ADC_SampleTime_7_5Cycles);
+    ADC_ClockModeConfig(ADC1, ADC_ClockMode_SynClkDiv2);
+    ADC_ChannelConfig(ADC1, ADC_Channel_13, ADC_SampleTime_13_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_12, ADC_SampleTime_13_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_11, ADC_SampleTime_13_5Cycles);
+    ADC_ChannelConfig(ADC1, ADC_Channel_10, ADC_SampleTime_13_5Cycles);
 
     ADC_GetCalibrationFactor(ADC1);
     ADC_DMARequestModeConfig(ADC1, ADC_DMAMode_Circular);
