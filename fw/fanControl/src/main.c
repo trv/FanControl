@@ -35,6 +35,7 @@ TIM15: LCD DMA timing
 
 /*
 TODO:
+- refactor main.c
 - pulse-skipping for 100% duty cycle? need to periodically output high to discharge cap
 - better RPM algorithm (report 0 when pulses stop, nicer filtering, disable interrupts after each edge?)
 - RPM feedback loop to control voltage based on desired RPM
