@@ -11,8 +11,24 @@ Schematic:
 - switch to ~3V Zener diode
 - add schottky diodes to 3V3 on GPIO PWM pins
 - increase input/output caps to 10 uF + 100uF electrolytic output cap
+- Add 12V -> 3.3V buck regulator circuit on carrier board
 - update pin assignments for 8x control PWM and 8x GPIO RPM inputs (EXTI)
 
 Layout:
 
 - rotate fan header 30 degrees
+
+
+Parts list:
+20x 10kΩ 0603 replacements (for lab)
+10x 3.3kΩ 0603 (for resistor divider)
+
+3x TPS62120 buck regulator
+	560kΩ 0603
+	180kΩ 0603
+	22pf 0603
+	2x 4.7µF 0603 or 0805, X5R or X7R, 25V
+	22µH (LQH3NPN or similar)
+
+
+
