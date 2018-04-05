@@ -60,12 +60,13 @@ void fan_setAllTarget_mV(uint16_t *target_mV)
 void fan_setAllTarget_RPM(uint16_t *target_RPM)
 {
 	// TODO!
+	(void)target_RPM;
 }
 
 void fan_getAllMeasured_mV(uint16_t *measured_mV)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		measured_mV = ADC2mV(adcValue[i]);
+		measured_mV[i] = ADC2mV(adcValue[i]);
 	}
 }
 
@@ -91,9 +92,9 @@ void fan_getAllMax_RPM(uint16_t *max_RPM)
 }
 
 
-#define R_HIGH		10000
-#define R_LOW		2000		// TODO: update to 3300 after rework
-#define ADC_REF_mV	3300
+#define R_HIGH		100		// in 100s of Ohms
+#define R_LOW		33		// in 100s of Ohms
+#define ADC_REF_mV	3240
 #define ADC_COUNTS	255
 
 static uint16_t mV2ADC(uint16_t mV)
