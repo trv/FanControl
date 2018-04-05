@@ -94,7 +94,7 @@ void fan_getAllMax_RPM(uint16_t *max_RPM)
 
 #define R_HIGH		100		// in 100s of Ohms
 #define R_LOW		33		// in 100s of Ohms
-#define ADC_REF_mV	3240
+#define ADC_REF_mV	3197
 #define ADC_COUNTS	255
 
 static uint16_t mV2ADC(uint16_t mV)
