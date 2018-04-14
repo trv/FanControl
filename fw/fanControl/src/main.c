@@ -4,10 +4,10 @@
 
 //#include "stm32f10x_dbgmcu.h"
 
+#include "RetargetSerial.h"
 #include "Timer.h"
 #include "LCD.h"
-#include "fan.h"
-
+#include "Fan.h"
 
 void Display_Update(void);
 
@@ -47,11 +47,13 @@ static uint16_t target_mV[FAN_NUM_CHANNELS] = {12000, 12000, 12000, 12000};
 int main(int argc, char* argv[])
 {
 	//DBGMCU_Config(DBGMCU_TIM15_STOP, ENABLE);
-
-	fan_Init();
+	RetargetSerial_Init();
+	Fan_Init();
 
 	timer_start();
 	timer_sleep(100);
+
+	printf("FanControl\n");
 
 	LCD_Init();
 
@@ -64,7 +66,6 @@ int main(int argc, char* argv[])
 	timer_sleep(250);
 
 	size_t i = 0;
-
 
 	for (;;) {
 		if (i > 8) {
@@ -79,8 +80,8 @@ int main(int argc, char* argv[])
 			target_mV[3] = 7500;
 		}
 		i++;
-		fan_setAllTarget_mV(target_mV);
-		timer_sleep(250);
+		Fan_setAllTarget_mV(target_mV);
+		timer_sleep(500);
 
 		Display_Update();
 	}
@@ -103,10 +104,15 @@ void Display_Update(void)
 	uint16_t measured_RPM[FAN_NUM_CHANNELS] = {0};
 	uint16_t max_RPM[FAN_NUM_CHANNELS] = {0};
 
-	fan_getAllMeasured_mV(measured_mV);
-	fan_getAllMeasured_PWM(measured_PWM);
-	fan_getAllMeasured_RPM(measured_RPM);
-	fan_getAllMax_RPM(max_RPM);
+	Fan_getAllMeasured_mV(measured_mV);
+	Fan_getAllMeasured_PWM(measured_PWM);
+	Fan_getAllMeasured_RPM(measured_RPM);
+	Fan_getAllMax_RPM(max_RPM);
+
+	printf("\r\n\033[37;1m\033[40m\033[1m%12s%16s%16s%16s%16s\033[0m\r\n", "channel", "target", "measured", "PWM", "RPM");
+	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
+		printf("%12d\t%12d\t%12d\t%12d\t%12d\r\n", i+1, target_mV[i], measured_mV[i], measured_PWM[i], measured_RPM[i]);
+	}
 
 	uint8_t adc_target, adc_value, pwm_value, rpm_value;
 

@@ -1,6 +1,5 @@
 
-#include "fan.h"
-
+#include "Fan.h"
 #include <stdlib.h>
 
 #include "stm32f0xx_adc.h"
@@ -28,7 +27,7 @@ static uint16_t adcValue[2*FAN_NUM_CHANNELS] = {0};
 static volatile uint32_t *PWM[FAN_NUM_CHANNELS] = {&(TIM3->CCR1), &(TIM3->CCR2), &(TIM3->CCR3), &(TIM3->CCR4)};
 
 // Public API
-void fan_Init(void)
+void Fan_Init(void)
 {
 	RPM_Init();
 	Control_Init();
@@ -50,41 +49,41 @@ void fan_Init(void)
 	GPIO_Init(GPIOB, &GPIO_InitStructure);
 }
 
-void fan_setAllTarget_mV(uint16_t *target_mV)
+void Fan_setAllTarget_mV(uint16_t *target_mV)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		target_ADC[i] = mV2ADC(target_mV[i]);
 	}
 }
 
-void fan_setAllTarget_RPM(uint16_t *target_RPM)
+void Fan_setAllTarget_RPM(uint16_t *target_RPM)
 {
 	// TODO!
 	(void)target_RPM;
 }
 
-void fan_getAllMeasured_mV(uint16_t *measured_mV)
+void Fan_getAllMeasured_mV(uint16_t *measured_mV)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		measured_mV[i] = ADC2mV(adcValue[i]);
 	}
 }
 
-void fan_getAllMeasured_PWM(uint16_t *measured_PWM)
+void Fan_getAllMeasured_PWM(uint16_t *measured_PWM)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		measured_PWM[i] = *PWM[i];
 	}
 }
 
-void fan_getAllMeasured_RPM(uint16_t *measured_RPM)
+void Fan_getAllMeasured_RPM(uint16_t *measured_RPM)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		measured_RPM[i] = rpm[i];
 	}
 }
 
-void fan_getAllMax_RPM(uint16_t *max_RPM)
+void Fan_getAllMax_RPM(uint16_t *max_RPM)
 {
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		max_RPM[i] = rpmMax[i];
