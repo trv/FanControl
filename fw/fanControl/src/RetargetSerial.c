@@ -85,6 +85,15 @@ void RetargetSerial_Init()
 /*  ----------------------------------------------------------------------------
     Private Function Definitions
     ------------------------------------------------------------------------- */
+
+int _close(int);
+int _fstat(int, struct stat*);
+int _isatty(int);
+off_t _lseek(int, off_t, int);
+int _read(int, char*, size_t);
+int _write(int, const char*, size_t);
+
+
 int _read(int __fd, char *__buf, size_t __nbyte)
 {
     (void) __fd;
