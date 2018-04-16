@@ -14,7 +14,7 @@ static uint16_t mV2ADC(uint16_t mV);
 static uint16_t ADC2mV(uint16_t mV);
 
 // start fans at full speed to measure max RPM for each channel
-static volatile uint16_t target_ADC[FAN_NUM_CHANNELS] = {170, 170, 170, 170};
+static volatile uint16_t target_ADC[FAN_NUM_CHANNELS] = {255, 255, 255, 255};
 static int16_t errorP_ADC[FAN_NUM_CHANNELS] = {0};
 static int16_t errorI_ADC[FAN_NUM_CHANNELS] = {0};
 static uint16_t adcValue[2*FAN_NUM_CHANNELS] = {0};

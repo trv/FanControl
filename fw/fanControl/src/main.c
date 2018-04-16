@@ -53,6 +53,7 @@ int main(int argc, char* argv[])
 	//DBGMCU_Config(DBGMCU_TIM15_STOP, ENABLE);
 	RetargetSerial_Init();
 	Fan_Init();
+	Fan_setAllTarget_mV(target_mV);
 
 	timer_start();
 	timer_sleep(100);
@@ -72,7 +73,7 @@ int main(int argc, char* argv[])
 	size_t i = 0;
 
 	for (;;) {
-		if (i > 8) {
+		if (i > 16) {
 			if (i & 0x10) {
 				target_mV[0] = 6000;
 				target_mV[1] = 9000;
@@ -122,7 +123,7 @@ void Display_Update(void)
 		}
 	}
 
-	printf("\033[37;1m\033[40m\033[1m%8s%8s%8s%8s%8s%8s%8s\033[0m\r\n", "channel", "target", "actual", "max mV", "PWM", "RPM", "Max RPM");
+	printf("\033[37;1m\033[40m\033[1m%8s%8s%8s%8s%8s%8s%8s\033[0m\r\n", "channel", "target", "actual", "max mV", "PWM", "RPM", "MaxRPM");
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		printf("%8d%8d%8d%8d%8d%8d%8d\r\n", i+1, target_mV[i], measured_mV[i], max_mV[i], measured_PWM[i], measured_RPM[i], max_RPM[i]);
 	}

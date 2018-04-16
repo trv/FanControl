@@ -16,13 +16,13 @@ data:
 #include "RPM.h"
 
 #include <string.h>
-#include <stdio.h>
 #include "Fan.h"
-
-#include "stm32f0xx_rcc.h"
 
 #define MAX_LENGTH		256
 #define TICKS_PER_REV	4
+
+static inline void RPM_event(uint8_t channel, uint16_t timestamp);
+static void hw_init(void);
 
 static volatile uint8_t event_index[FAN_NUM_CHANNELS];
 static volatile uint16_t events[FAN_NUM_CHANNELS][MAX_LENGTH];
@@ -34,9 +34,12 @@ static const uint32_t g_tickRate_us = 20;
 static volatile uint16_t lastCount[FAN_NUM_CHANNELS] = {0};
 static volatile uint8_t valid[FAN_NUM_CHANNELS] = {0};
 
+#ifndef RPM_TEST
+#include "stm32f0xx_rcc.h"
 const uint32_t rpmPins[FAN_NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9}; // config alternate EXTI handler for GPIO 0-3
 const uint8_t rpm_exti_pinSource[FAN_NUM_CHANNELS] = {EXTI_PinSource13, EXTI_PinSource14, EXTI_PinSource8, EXTI_PinSource9};
 GPIO_TypeDef *rpmPort = GPIOB;
+#endif
 
 void RPM_Init()
 {
@@ -45,6 +48,49 @@ void RPM_Init()
 	memset(rpm, 0, sizeof(rpm));
 	memset(valid, 0, sizeof(valid));
 
+	hw_init();
+}
+
+#define FADE_DIV		3
+#define FADE_COMP		(FADE_DIV - 1)
+void RPM_getAllMeasured_RPM(uint16_t *measured_RPM)
+{
+	uint16_t now_ticks = TIM2->CNT;
+	uint16_t fade_time = g_timeWindow_ticks / FADE_DIV;
+	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
+		if (valid[i]) {
+			uint32_t count = 0;
+			uint8_t index = event_index[i] - 1;
+			while (index != event_index[i]) {
+				uint16_t delta_ticks = now_ticks - events[i][index];
+				if (delta_ticks < fade_time) {
+					count += (1000 * delta_ticks + fade_time/2) / fade_time;
+				} else if (delta_ticks < g_timeWindow_ticks - fade_time) {
+					count += 1000;
+				} else if (delta_ticks < g_timeWindow_ticks) {
+					count += (1000 * (g_timeWindow_ticks - delta_ticks) + fade_time/2) / fade_time;
+				} else if (count != 0) {
+					break;
+				}
+				index--;
+			}
+			uint32_t divisor = (FADE_COMP*g_timeWindow_ticks*g_tickRate_us)/FADE_DIV;
+			measured_RPM[i] = (count*15000 + divisor/2)/divisor;
+		} else {
+			measured_RPM[i] = 0;
+		}
+	}
+}
+
+static inline void RPM_event(uint8_t channel, uint16_t timestamp)
+{
+	events[channel][event_index[channel]++] = timestamp;
+}
+
+
+#ifndef RPM_TEST
+static void hw_init(void)
+{
 	// GPIO Config ------------------------
 	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
 
@@ -101,43 +147,6 @@ void RPM_Init()
 	TIM_Cmd(TIM2, ENABLE);
 }
 
-#define FADE_DIV		3
-#define FADE_COMP		(FADE_DIV - 1)
-void RPM_getAllMeasured_RPM(uint16_t *measured_RPM)
-{
-	uint16_t now_ticks = TIM2->CNT;
-	uint16_t fade_time = g_timeWindow_ticks / FADE_DIV;
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		if (valid[i]) {
-			uint32_t count = 0;
-			uint8_t index = event_index[i] - 1;
-			while (index != event_index[i]) {
-				uint16_t delta_ticks = now_ticks - events[i][index];
-				if (delta_ticks < fade_time) {
-					count += (1000 * delta_ticks + fade_time/2) / fade_time;
-				} else if (delta_ticks < g_timeWindow_ticks - fade_time) {
-					count += 1000;
-				} else if (delta_ticks < g_timeWindow_ticks) {
-					count += (1000 * (g_timeWindow_ticks - delta_ticks) + fade_time/2) / fade_time;
-				} else if (count != 0) {
-					break;
-				}
-				index--;
-			}
-			printf("ch%d: index=%d, count=%lu, now=%u\r\n", i, event_index[i], count, now_ticks);
-			uint32_t divisor = (FADE_COMP*g_timeWindow_ticks*g_tickRate_us)/FADE_DIV;
-			measured_RPM[i] = (count*15000 + divisor/2)/divisor;
-		} else {
-			measured_RPM[i] = 0;
-		}
-	}
-}
-
-void RPM_event(uint8_t channel, uint16_t timestamp)
-{
-	events[channel][event_index[channel]++] = timestamp;
-}
-
 void EXTI4_15_IRQHandler(void);
 void EXTI4_15_IRQHandler(void)
 {
@@ -148,7 +157,7 @@ void EXTI4_15_IRQHandler(void)
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		if (EXTI_GetFlagStatus(rpmPins[i])) {
 			if (!valid[i] || (uint16_t)(count - lastCount[i]) > (2500 / g_tickRate_us)) {
-				events[i][event_index[i]++] = count;
+				RPM_event(i, count);
 				valid[i] = 1;
 			}
 			lastCount[i] = count;
@@ -157,7 +166,12 @@ void EXTI4_15_IRQHandler(void)
 	}
 	GPIOB->BRR = GPIO_Pin_11;
 }
+#else
+static void hw_init(void)
+{
 
+}
+#endif
 
 #ifdef RPM_TEST
 #include <stdlib.h>
