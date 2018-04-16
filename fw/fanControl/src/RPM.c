@@ -22,6 +22,7 @@ data:
 #define TICKS_PER_REV	4
 
 static inline void RPM_event(uint8_t channel, uint16_t timestamp);
+static void updateRPM(uint16_t *measured_RPM, uint16_t now_ticks);
 static void hw_init(void);
 
 static volatile uint8_t event_index[FAN_NUM_CHANNELS];
@@ -43,19 +44,18 @@ GPIO_TypeDef *rpmPort = GPIOB;
 
 void RPM_Init()
 {
-	memset(event_index, 0, sizeof(event_index));
-	memset(events, 0, sizeof(events));
-	memset(rpm, 0, sizeof(rpm));
-	memset(valid, 0, sizeof(valid));
+	memset((void *)event_index, 0, sizeof(event_index));
+	memset((void *)events, 0, sizeof(events));
+	memset((void *)rpm, 0, sizeof(rpm));
+	memset((void *)valid, 0, sizeof(valid));
 
 	hw_init();
 }
 
 #define FADE_DIV		3
 #define FADE_COMP		(FADE_DIV - 1)
-void RPM_getAllMeasured_RPM(uint16_t *measured_RPM)
+static void updateRPM(uint16_t *measured_RPM, uint16_t now_ticks)
 {
-	uint16_t now_ticks = TIM2->CNT;
 	uint16_t fade_time = g_timeWindow_ticks / FADE_DIV;
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		if (valid[i]) {
@@ -85,10 +85,16 @@ void RPM_getAllMeasured_RPM(uint16_t *measured_RPM)
 static inline void RPM_event(uint8_t channel, uint16_t timestamp)
 {
 	events[channel][event_index[channel]++] = timestamp;
+	valid[channel] = 1;
 }
 
 
 #ifndef RPM_TEST
+void RPM_getAllMeasured_RPM(uint16_t *measured_RPM)
+{
+	updateRPM(measured_RPM, TIM2->CNT);
+}
+
 static void hw_init(void)
 {
 	// GPIO Config ------------------------
@@ -158,7 +164,6 @@ void EXTI4_15_IRQHandler(void)
 		if (EXTI_GetFlagStatus(rpmPins[i])) {
 			if (!valid[i] || (uint16_t)(count - lastCount[i]) > (2500 / g_tickRate_us)) {
 				RPM_event(i, count);
-				valid[i] = 1;
 			}
 			lastCount[i] = count;
 			EXTI_ClearFlag(rpmPins[i]);
@@ -186,11 +191,10 @@ int main(int argc, char *argv[])
 	}
 
 	uint16_t rpm[FAN_NUM_CHANNELS];
-	RPM_Init(20, 25000);		// 20us * 25000 ticks = 0.5 seconds
+	RPM_Init();
+
 
 	uint32_t now_ticks = 30000 * 65536;	// init current time at least a window past the start
-
-
 	uint32_t period = (50000u * 65536u / sim_RPM) * 15;
 	uint32_t jitter = period / 20;
 
@@ -200,7 +204,7 @@ int main(int argc, char *argv[])
 	// populate events
 	bool even = true;
 	uint32_t last_tick = 0;
-	for (int i = 0; i < 500; i++) {
+	for (int i = 0; i < 100; i++) {
 		uint16_t event_tick = 0;
 		if (true) {
 			event_tick = (now_ticks + rand() % jitter) >> 16;
@@ -217,7 +221,7 @@ int main(int argc, char *argv[])
 		// test reported RPM
 		uint16_t delta = (now_ticks >> 16) - meas_ticks;
 		while (delta > meas_period) {
-			RPM_getAllMeasured_RPM(rpm, meas_ticks);
+			updateRPM(rpm, meas_ticks);
 			printf("time: %8d\trpm: %4d\n", meas_ticks, rpm[0]);
 			meas_ticks += meas_period;
 			delta -= meas_period;
