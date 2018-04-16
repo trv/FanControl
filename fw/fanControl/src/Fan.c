@@ -2,21 +2,16 @@
 #include "Fan.h"
 #include <stdlib.h>
 
+#include "RPM.h"
+
 #include "stm32f0xx_adc.h"
 #include "stm32f0xx_tim.h"
 #include "stm32f0xx_rcc.h"
 
 static void Sense_Init(void);
-static void RPM_Init(void);
 static void Control_Init(void);
 static uint16_t mV2ADC(uint16_t mV);
 static uint16_t ADC2mV(uint16_t mV);
-
-static volatile uint16_t rpmMax[FAN_NUM_CHANNELS] = {0};
-static volatile uint16_t rpm[FAN_NUM_CHANNELS] = {0};
-static volatile uint16_t lastCount[FAN_NUM_CHANNELS] = {0};
-static volatile uint16_t delta[FAN_NUM_CHANNELS] = {0};
-static volatile uint8_t valid[FAN_NUM_CHANNELS] = {0};
 
 // start fans at full speed to measure max RPM for each channel
 static volatile uint16_t target_ADC[FAN_NUM_CHANNELS] = {170, 170, 170, 170};
@@ -31,7 +26,7 @@ void Fan_Init(void)
 {
 	RPM_Init();
 	Control_Init();
-	Sense_Init();\
+	Sense_Init();
 
 	// for ADC timing debug
 	// Configure pin in output push/pull mode
@@ -75,21 +70,6 @@ void Fan_getAllMeasured_PWM(uint16_t *measured_PWM)
 		measured_PWM[i] = *PWM[i];
 	}
 }
-
-void Fan_getAllMeasured_RPM(uint16_t *measured_RPM)
-{
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		measured_RPM[i] = rpm[i];
-	}
-}
-
-void Fan_getAllMax_RPM(uint16_t *max_RPM)
-{
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		max_RPM[i] = rpmMax[i];
-	}
-}
-
 
 #define R_HIGH		100		// in 100s of Ohms
 #define R_LOW		33		// in 100s of Ohms
@@ -214,96 +194,6 @@ void Sense_Init(void)
     ADC_DMACmd(ADC1, ENABLE);
     ADC_Cmd(ADC1, ENABLE);
 	ADC_StartOfConversion(ADC1);
-}
-
-const uint32_t rpmPins[FAN_NUM_CHANNELS] = {GPIO_Pin_13, GPIO_Pin_14, GPIO_Pin_8, GPIO_Pin_9}; // config alternate EXTI handler for GPIO 0-3
-const uint8_t rpm_exti_pinSource[FAN_NUM_CHANNELS] = {EXTI_PinSource13, EXTI_PinSource14, EXTI_PinSource8, EXTI_PinSource9};
-GPIO_TypeDef *rpmPort = GPIOB;
-
-void RPM_Init(void)
-{
-	// GPIO Config ------------------------
-	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
-
-	// Configure pin in output push/pull mode
-	GPIO_InitTypeDef GPIO_InitStructure = {
-			.GPIO_Speed = GPIO_Speed_Level_2,
-			.GPIO_Mode = GPIO_Mode_IN,
-			.GPIO_OType = GPIO_OType_PP,
-			.GPIO_PuPd = GPIO_PuPd_UP,
-	};
-
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		GPIO_InitStructure.GPIO_Pin = rpmPins[i];
-		GPIO_Init(rpmPort, &GPIO_InitStructure);
-	}
-
-	// EXTI Config
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		SYSCFG_EXTILineConfig(EXTI_PortSourceGPIOB, rpm_exti_pinSource[i]);
-	}
-
-	EXTI_InitTypeDef EXTI_InitStruct = {
-			.EXTI_Mode = EXTI_Mode_Interrupt,
-			.EXTI_Trigger = EXTI_Trigger_Rising_Falling,
-			.EXTI_LineCmd = ENABLE
-	};
-
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		EXTI_InitStruct.EXTI_Line = rpmPins[i];
-		EXTI_Init(&EXTI_InitStruct);
-	}
-
-	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
-	NVIC_SetPriority(EXTI4_15_IRQn, 3);
-	NVIC_EnableIRQ(EXTI4_15_IRQn);
-
-	// TIM2 config - input capture
-	// RPM up to 4000 = 133Hz pulses @ 2 per revolution (~7.5ms)
-	// min RPM ~500 = 16 Hz (~62.5 ms)
-	// resolution of +/-1% ~= 1ms
-
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-
-	TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct = {
-			.TIM_Prescaler = 48,	// 1000 kHz clock (1us)
-			.TIM_CounterMode = TIM_CounterMode_Up,
-			.TIM_Period = 0xFFFF,	// 65.536 ms period
-			.TIM_ClockDivision = TIM_CKD_DIV1,
-			.TIM_RepetitionCounter = 0,
-	};
-	TIM_TimeBaseInit(TIM2, &TIM_TimeBaseInitStruct);
-
-	TIM_Cmd(TIM2, ENABLE);
-}
-
-void EXTI4_15_IRQHandler(void);
-void EXTI4_15_IRQHandler(void)
-{
-	GPIOB->BSRR = GPIO_Pin_11;
-
-	uint16_t count = TIM2->CNT;
-
-	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		if (EXTI_GetFlagStatus(rpmPins[i])) {
-			if (valid[i] && (count - lastCount[i]) > 4000) {
-				delta[i] = count - lastCount[i];
-				uint16_t newRPM = 15000000/delta[i];
-				rpm[i] = (newRPM + (rpm[i] * 3))/4;
-				if (rpm[i] > rpmMax[i]) {
-					rpmMax[i] = rpm[i];
-				}
-				lastCount[i] = count;
-			} else {
-				lastCount[i] = count;
-				valid[i] = 1;
-			}
-			EXTI_ClearFlag(rpmPins[i]);
-		}
-	}
-	GPIOB->BRR = GPIO_Pin_11;
-
 }
 
 void Control_Init(void)

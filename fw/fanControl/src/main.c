@@ -8,6 +8,7 @@
 #include "Timer.h"
 #include "LCD.h"
 #include "Fan.h"
+#include "RPM.h"
 
 void Display_Update(void);
 
@@ -34,6 +35,7 @@ TODO:
 
 static uint16_t target_mV[FAN_NUM_CHANNELS] = {12000, 12000, 12000, 12000};
 
+static uint16_t max_RPM[FAN_NUM_CHANNELS] = {0};
 
 // ----- main() ---------------------------------------------------------------
 
@@ -102,28 +104,35 @@ void Display_Update(void)
 	uint16_t measured_mV[FAN_NUM_CHANNELS] = {0};
 	uint16_t measured_PWM[FAN_NUM_CHANNELS] = {0};
 	uint16_t measured_RPM[FAN_NUM_CHANNELS] = {0};
-	uint16_t max_RPM[FAN_NUM_CHANNELS] = {0};
 
 	Fan_getAllMeasured_mV(measured_mV);
 	Fan_getAllMeasured_PWM(measured_PWM);
-	Fan_getAllMeasured_RPM(measured_RPM);
-	Fan_getAllMax_RPM(max_RPM);
 
-	printf("\r\n\033[37;1m\033[40m\033[1m%12s%16s%16s%16s%16s\033[0m\r\n", "channel", "target", "measured", "PWM", "RPM");
+	printf("\033[H\033[J");
+
+	RPM_getAllMeasured_RPM(measured_RPM);
+
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		printf("%12d\t%12d\t%12d\t%12d\t%12d\r\n", i+1, target_mV[i], measured_mV[i], measured_PWM[i], measured_RPM[i]);
+		if (measured_RPM[i] > max_RPM[i]) {
+			max_RPM[i] = measured_RPM[i];
+		}
+	}
+
+	printf("\033[37;1m\033[40m\033[1m%8s%8s%8s%8s%8s%8s\033[0m\r\n", "channel", "target", "actual", "PWM", "RPM", "Max RPM");
+	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
+		printf("%8d%8d%8d%8d%8d%8d\r\n", i+1, target_mV[i], measured_mV[i], measured_PWM[i], measured_RPM[i], max_RPM[i]);
 	}
 
 	uint8_t adc_target, adc_value, pwm_value, rpm_value;
 
-	const char *lookup1 = "        \010\011\012\013\014\015\016\017";
-	const char *lookup2 = "\010\011\012\013\014\015\016\017        ";
+	const char *lookup1 = "        \010\011\012\013\014\015\016\017\017";
+	const char *lookup2 = "\010\011\012\013\014\015\016\017         ";
 
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		adc_target = 15 * target_mV[i] / max_mV;
-		adc_value = 15 * measured_mV[i] / max_mV;
-		pwm_value = 15 * measured_PWM[i] / max_PWM;
-		rpm_value = 15 * measured_RPM[i] / max_RPM[i];
+		adc_target = 16 * target_mV[i] / max_mV;
+		adc_value = 16 * measured_mV[i] / max_mV;
+		pwm_value = 16 * measured_PWM[i] / max_PWM;
+		rpm_value = 16 * measured_RPM[i] / max_RPM[i];
 		snprintf(&line1[4*i], 5, "%c%c%c%c ", lookup1[adc_target], lookup1[adc_value], lookup1[pwm_value], lookup1[rpm_value]);
 		snprintf(&line2[4*i], 5, "%c%c%c%c ", lookup2[adc_target], lookup2[adc_value], lookup2[pwm_value], lookup2[rpm_value]);
 	}
