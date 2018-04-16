@@ -36,6 +36,8 @@ TODO:
 static uint16_t target_mV[FAN_NUM_CHANNELS] = {12000, 12000, 12000, 12000};
 
 static uint16_t max_RPM[FAN_NUM_CHANNELS] = {0};
+static uint16_t max_mV[FAN_NUM_CHANNELS] = {0};
+
 
 // ----- main() ---------------------------------------------------------------
 
@@ -98,7 +100,6 @@ void Display_Update(void)
 	char line1[17];
 	char line2[17];
 
-	uint16_t max_mV = 12000;	// 12V
 	uint16_t max_PWM = 240;
 
 	uint16_t measured_mV[FAN_NUM_CHANNELS] = {0};
@@ -116,11 +117,14 @@ void Display_Update(void)
 		if (measured_RPM[i] > max_RPM[i]) {
 			max_RPM[i] = measured_RPM[i];
 		}
+		if (measured_mV[i] > max_mV[i]) {
+			max_mV[i] = measured_mV[i];
+		}
 	}
 
-	printf("\033[37;1m\033[40m\033[1m%8s%8s%8s%8s%8s%8s\033[0m\r\n", "channel", "target", "actual", "PWM", "RPM", "Max RPM");
+	printf("\033[37;1m\033[40m\033[1m%8s%8s%8s%8s%8s%8s%8s\033[0m\r\n", "channel", "target", "actual", "max mV", "PWM", "RPM", "Max RPM");
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		printf("%8d%8d%8d%8d%8d%8d\r\n", i+1, target_mV[i], measured_mV[i], measured_PWM[i], measured_RPM[i], max_RPM[i]);
+		printf("%8d%8d%8d%8d%8d%8d%8d\r\n", i+1, target_mV[i], measured_mV[i], max_mV[i], measured_PWM[i], measured_RPM[i], max_RPM[i]);
 	}
 
 	uint8_t adc_target, adc_value, pwm_value, rpm_value;
@@ -129,8 +133,8 @@ void Display_Update(void)
 	const char *lookup2 = "\010\011\012\013\014\015\016\017         ";
 
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
-		adc_target = 16 * target_mV[i] / max_mV;
-		adc_value = 16 * measured_mV[i] / max_mV;
+		adc_target = 16 * target_mV[i] / max_mV[i];
+		adc_value = 16 * measured_mV[i] / max_mV[i];
 		pwm_value = 16 * measured_PWM[i] / max_PWM;
 		rpm_value = 16 * measured_RPM[i] / max_RPM[i];
 		snprintf(&line1[4*i], 5, "%c%c%c%c ", lookup1[adc_target], lookup1[adc_value], lookup1[pwm_value], lookup1[rpm_value]);
