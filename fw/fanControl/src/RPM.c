@@ -147,16 +147,11 @@ void EXTI4_15_IRQHandler(void)
 
 	for (int i = 0; i < FAN_NUM_CHANNELS; i++) {
 		if (EXTI_GetFlagStatus(rpmPins[i])) {
-//			if (valid[i]) {
-//				if ((count - lastCount[i]) > 100) {
-//					RPM_event(i, count);
-//					lastCount[i] = count;
-//				}
-//			} else {
-				RPM_event(i, count);
-				lastCount[i] = count;
+			if (!valid[i] || (uint16_t)(count - lastCount[i]) > (2500 / g_tickRate_us)) {
+				events[i][event_index[i]++] = count;
 				valid[i] = 1;
-//			}
+			}
+			lastCount[i] = count;
 			EXTI_ClearFlag(rpmPins[i]);
 		}
 	}
