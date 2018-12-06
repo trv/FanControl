@@ -14,7 +14,7 @@ void Display_Update(void);
 
 
 /*
-
+UART1: serial output (PA9 = TX, PA10 = RX)
 ADC: sample CH10-13 @ 200kHz, DMA to memory (double-buffered, use half-full and complete flags)
 TIM2-3: output PWM at 200kHz, update based on ADC or RPM values
 TIMx?: timer for EXTI-triggered GPIO RPM sense pins (internal only)
@@ -70,9 +70,22 @@ int main(int argc, char* argv[])
 	LCD_Update();
 	timer_sleep(250);
 
-	size_t i = 0;
+	// wait at default max voltage to measure max RPM
+	for (int i = 0; i < 4; i++) {
+		timer_sleep(1000);
+		Display_Update();
+	}
+
+	// reset target to 7.5V
+	for (int i = 0; i < 4; i++) {
+		target_mV[i] = 7500;
+	}
+	Fan_setAllTarget_mV(target_mV);
+
+	//size_t i = 0;
 
 	for (;;) {
+		/*
 		if (i > 16) {
 			if (i & 0x10) {
 				target_mV[0] = 6000;
@@ -86,7 +99,8 @@ int main(int argc, char* argv[])
 		}
 		i++;
 		Fan_setAllTarget_mV(target_mV);
-		timer_sleep(500);
+		*/
+		timer_sleep(1000);
 
 		Display_Update();
 	}
